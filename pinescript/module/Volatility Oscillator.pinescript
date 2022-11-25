@@ -1,0 +1,28 @@
+// # ========================================================================= #
+// #                   |   Volatility Oscillator  |
+// # ========================================================================= #
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © veryfid
+
+var groupVO = "Volatility Oscillator Settings"
+
+VOLength = input(100, title = "VOLength", group = groupVO)
+spike = close - open
+x = ta.stdev(spike, VOLength)
+y = ta.stdev(spike, VOLength) * -1
+
+//plot(spike, color=color.new(color.white, 0), linewidth=2, title='Spike Linel')
+
+//p1 = plot(x, 'Upper Line')
+//p2 = plot(y, 'Lower Line')
+
+//plot(0, color=color.new(color.gray, 0), title='Zero Line')
+
+//plot(spike, color=color.new(color.blue, 80), style=plot.style_area, title='Spike Fill')
+
+buyVO = spike > x
+sellVO = spike < y
+// # ========================================================================= #
+// #                   |   Volatility Oscillator  |
+// # ========================================================================= #

@@ -1,0 +1,37 @@
+// # ========================================================================= #
+// #                   |   Session  |
+// # ========================================================================= #
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Aurocks_AIF
+///Sessions
+
+var groupSession = "Session Settings"
+
+res = input.timeframe("D", "Resolution", ["D","W","M"], group = groupSession)
+london = input.session("0300-1200:1234567", "London Session", group = groupSession)
+ny = input.session("0800-1700:1234567", "New York Session", group = groupSession)
+
+//Bars
+
+is_session(sess) =>
+    not na(time(timeframe.period, sess, "America/New_York"))
+    
+
+//London
+
+London = input.bool(true, "London Session", group = groupSession)
+
+londonSession = is_session(london)
+
+//New York
+
+NY = input.bool(true, "New York Session", group = groupSession)
+
+nySession = is_session(ny)
+
+
+onSession = londonSession and nySession
+
+// # ========================================================================= #
+// #                   |   Session  |
+// # ========================================================================= #

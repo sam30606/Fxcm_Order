@@ -1,0 +1,167 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("4-1m Scalping", shorttitle="4-1m Scalping", overlay=true)
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Supertrend  |
+// # ========================================================================= #
+
+
+atrPeriod = input(10, "ATR Length")
+factor = input.float(3.0, "Factor", step = 0.01)
+
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+bodyMiddle = plot((open + close) / 2, display=display.none)
+//upTrend = plot(direction < 0 ? supertrend : na, "Up Trend", color = color.green, style=plot.style_linebr)
+//downTrend = plot(direction < 0? na : supertrend, "Down Trend", color = color.red, style=plot.style_linebr)
+
+//fill(bodyMiddle, upTrend, color.new(color.green, 90), fillgaps=false)
+//fill(bodyMiddle, downTrend, color.new(color.red, 90), fillgaps=false)
+
+// # ========================================================================= #
+// #                   |   Supertrend  |
+// # ========================================================================= #
+
+
+// # ========================================================================= #
+// #                   |   RSI  |
+// # ========================================================================= #
+
+
+ma(source, length, type) =>
+    switch type
+        "SMA" => ta.sma(source, length)
+        "Bollinger Bands" => ta.sma(source, length)
+        "EMA" => ta.ema(source, length)
+        "SMMA (RMA)" => ta.rma(source, length)
+        "WMA" => ta.wma(source, length)
+        "VWMA" => ta.vwma(source, length)
+
+rsiLengthInput_1 = input.int(20, minval=1, title="RSI Length", group="RSI Settings-1")
+rsiSourceInput_1 = input.source(close, "Source", group="RSI Settings-1")
+
+rsiLengthInput_2 = input.int(100, minval=1, title="RSI Length", group="RSI Settings-2")
+rsiSourceInput_2 = input.source(close, "Source", group="RSI Settings-2")
+
+maTypeInput = input.string("SMA", title="MA Type", options=["SMA", "Bollinger Bands", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group="MA Settings")
+maLengthInput = input.int(14, title="MA Length", group="MA Settings")
+bbMultInput = input.float(2.0, minval=0.001, maxval=50, title="BB StdDev", group="MA Settings")
+
+up_1 = ta.rma(math.max(ta.change(rsiSourceInput_1), 0), rsiLengthInput_1)
+down_1 = ta.rma(-math.min(ta.change(rsiSourceInput_1), 0), rsiLengthInput_1)
+
+up_2 = ta.rma(math.max(ta.change(rsiSourceInput_2), 0), rsiLengthInput_2)
+down_2 = ta.rma(-math.min(ta.change(rsiSourceInput_2), 0), rsiLengthInput_2)
+
+rsi_1 = down_1 == 0 ? 100 : up_1 == 0 ? 0 : 100 - (100 / (1 + up_1 / down_1))
+rsi_2 = down_2 == 0 ? 100 : up_2 == 0 ? 0 : 100 - (100 / (1 + up_2 / down_2))
+
+rsiMA = ma(rsi_1, maLengthInput, maTypeInput)
+isBB = maTypeInput == "Bollinger Bands"
+
+//plot(rsi_1, "RSI-1", color=color.red)
+//plot(rsi_2, "RSI-2", color=color.blue)
+
+//plot(rsiMA, "RSI-based MA", color=color.yellow)
+// rsiUpperBand = hline(70, "RSI Upper Band", color=#787B86)
+// hline(50, "RSI Middle Band", color=color.new(#787B86, 50))
+// rsiLowerBand = hline(30, "RSI Lower Band", color=#787B86)
+// fill(rsiUpperBand, rsiLowerBand, color=color.rgb(126, 87, 194, 90), title="RSI Background Fill")
+// bbUpperBand = plot(isBB ? rsiMA + ta.stdev(rsi, maLengthInput) * bbMultInput : na, title = "Upper Bollinger Band", color=color.green)
+// bbLowerBand = plot(isBB ? rsiMA - ta.stdev(rsi, maLengthInput) * bbMultInput : na, title = "Lower Bollinger Band", color=color.green)
+// fill(bbUpperBand, bbLowerBand, color= isBB ? color.new(color.green, 90) : na, title="Bollinger Bands Background Fill")
+
+// # ========================================================================= #
+// #                   |   RSI  |
+// # ========================================================================= #
+var float entryPrice=0
+
+fromYear = input.int(defval=2022, title='From Year', minval=2020, group="Back Test Settings")
+fromMomth = input.int(defval=8, title='From Month', minval=1, maxval=12, group="Back Test Settings")
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, group="Back Test Settings")
+toYear = input.int(defval=2300, title='To Year', minval=2020, group="Back Test Settings")
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, group="Back Test Settings")
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, group="Back Test Settings")
+
+start = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+finish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=start and time <= finish ? true : false
+
+stop_loss_and_tp = input(title='Enable Stop Loss and Take Profit', defval=true, group="Trace Stop Settings")
+trail_stop = input(title='Enable Trail Stop', defval=true, group="Trace Stop Settings")
+buy_stop_loss = input.float(1, title='buy_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+sell_stop_loss = input.float(1, title='sell_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+buy_tp = input.float(3, title='buy_tp %', step = 0.1, group="Trace Stop Settings")/100
+sell_tp = input.float(3, title='sell_tp %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_long = input.float(0.2, title='trail_stop_long %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_short = input.float(0.2, title='trail_stop_short %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_long_offset = input.float(0.1 ,title='trail_stop_long_offset %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_short_offset = input.float(0.1, title='trail_stop_short_offset %', step = 0.1, group="Trace Stop Settings")/100
+
+
+// you can set your own logic here
+
+
+rsiGap=input.float(defval =10, title="RSI gap", step = 0.1, group="Trade Settings")
+rsiMaGap=input.float(defval =3.2, title="RSI MA gap", step = 0.1, group="Trade Settings")
+
+buySide=direction < 0 ? true : false
+sellSide=direction > 0 ? true : false
+
+longSide=(rsi_1>rsi_2?true:false)
+shortSide=(rsi_2>rsi_1?true:false)
+
+
+aboveRsiMaK=(rsi_1>rsiMA?true:false)
+belowRsiMaK=(rsiMA>rsi_1?true:false)
+
+crossover=ta.crossover(rsi_1, rsiMA)
+crossunder=ta.crossunder(rsi_1, rsiMA)
+
+
+buyCondition=(longSide and crossover and rsi_1-rsi_2>rsiGap and rsi_1-rsiMA>rsiMaGap) ? true : false
+sellCondition=(shortSide and crossunder and rsi_2-rsi_1>rsiGap and rsi_1-rsiMA>rsiMaGap) ? true : false
+
+if(window())
+    if (buyCondition)
+        entryPrice := (close)
+        strategy.close('Sell', alert_message = "buy")
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        strategy.exit('Close Buy', 'Buy', limit=stop_loss_and_tp ? (close) * (1 + buy_tp) : na, stop=stop_loss_and_tp ? (close) * (1 - buy_stop_loss) : na, trail_price=trail_stop ? (close) * (1+trail_stop_long) : na, trail_offset=trail_stop ? (close) * (1+trail_stop_long) * trail_stop_long_offset / syminfo.mintick : na, comment_trailing='close trailing', alert_message = "close")
+    if (sellCondition)
+        entryPrice := (close)
+        strategy.close('Buy', alert_message = "sell")
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        strategy.exit('Close Sell', 'Sell', limit=stop_loss_and_tp ? (close) * (1 - sell_tp) : na, stop=stop_loss_and_tp ? (close) * (1 + sell_stop_loss) : na, trail_price=trail_stop ? (close) * (1-trail_stop_short) : na, trail_offset=trail_stop ? (close) * (1-trail_stop_short) * trail_stop_short_offset / syminfo.mintick: na, comment_trailing='close trailing', alert_message = "close")
+
+
+net_profit = strategy.netprofit + strategy.openprofit
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+
+
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(rsi_1 ,"rsi_1", "", location = location.top)
+plotchar(rsi_2 ,"rsi_2", "", location = location.top)
+//plotchar(rsiMA ,"rsiMA", "", location = location.top)
+plotchar(buySide ,"buySide", "", location = location.top)
+plotchar(shortSide ,"shortSide", "", location = location.top)
+plotchar(longSide ,"longSide", "", location = location.top)
+plotchar(shortSide ,"shortSide", "", location = location.top)
+plotchar(aboveRsiMaK ,"aboveRsiMaK", "", location = location.top)
+plotchar(belowRsiMaK ,"belowRsiMaK", "", location = location.top)
+plotchar(crossover ,"crossover", "", location = location.top)
+plotchar(crossunder ,"crossunder", "", location = location.top)
+plotchar(buyCondition ,"buyCondition", "", location = location.top)
+plotchar(sellCondition ,"sellCondition", "", location = location.top)

@@ -1,0 +1,302 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("5-1m Scalping", shorttitle="5-1m Scalping", overlay=true)
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen = input.int(200, minval=1, title="Length", group="EMA Settings")
+emaSrc = input(close, title="Source", group="EMA Settings")
+offset = input.int(title="Offset", defval=0, minval=-500, maxval=500, group="EMA Settings")
+emaOut = ta.ema(emaSrc, emaLen)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+adxlen = input(14, title="ADX Smoothing", group="ADX settings")
+dilen = input(14, title="DI Length", group="ADX settings")
+dirmov(len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, len)
+	plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+	[plus, minus]
+adx(dilen, adxlen) =>
+	[plus, minus] = dirmov(dilen)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+sig = adx(dilen, adxlen)
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+adxDIlen = input(14, group="ADXDI settings")
+
+
+TrueRange = math.max(math.max(high - low, math.abs(high - nz(close[1]))), math.abs(low - nz(close[1])))
+DirectionalMovementPlus = high - nz(high[1]) > nz(low[1]) - low ? math.max(high - nz(high[1]), 0) : 0
+DirectionalMovementMinus = nz(low[1]) - low > high - nz(high[1]) ? math.max(nz(low[1]) - low, 0) : 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - nz(SmoothedTrueRange[1]) / adxDIlen + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - nz(SmoothedDirectionalMovementPlus[1]) / adxDIlen + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - nz(SmoothedDirectionalMovementMinus[1]) / adxDIlen + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   UT Bot Alerts  |
+// # ========================================================================= #
+
+// Inputs
+A_a = input(defval = 2, title='Key Vaule. \'This changes the sensitivity\'', group="A_Settings")
+A_c = input(defval = 6, title='ATR Period', group="A_Settings")
+
+B_a = input(defval = 2, title='Key Vaule. \'This changes the sensitivity\'', group="B_Settings")
+B_c = input(defval = 1, title='ATR Period', group="B_Settings")
+
+A_xATR = ta.atr(A_c)
+A_nLoss = A_a * A_xATR
+
+B_xATR = ta.atr(B_c)
+B_nLoss = B_a * B_xATR
+
+src = close
+
+A_xATRTrailingStop = 0.0
+
+A_iff_1 = src > nz(A_xATRTrailingStop[1], 0) ? src - A_nLoss : src + A_nLoss
+A_iff_2 = src < nz(A_xATRTrailingStop[1], 0) and src[1] < nz(A_xATRTrailingStop[1], 0) ? math.min(nz(A_xATRTrailingStop[1]), src + A_nLoss) : A_iff_1
+A_xATRTrailingStop := src > nz(A_xATRTrailingStop[1], 0) and src[1] > nz(A_xATRTrailingStop[1], 0) ? math.max(nz(A_xATRTrailingStop[1]), src - A_nLoss) : A_iff_2
+
+B_xATRTrailingStop = 0.0
+
+B_iff_1 = src > nz(B_xATRTrailingStop[1], 0) ? src - B_nLoss : src + B_nLoss
+B_iff_2 = src < nz(B_xATRTrailingStop[1], 0) and src[1] < nz(B_xATRTrailingStop[1], 0) ? math.min(nz(B_xATRTrailingStop[1]), src + B_nLoss) : B_iff_1
+B_xATRTrailingStop := src > nz(B_xATRTrailingStop[1], 0) and src[1] > nz(B_xATRTrailingStop[1], 0) ? math.max(nz(B_xATRTrailingStop[1]), src - B_nLoss) : B_iff_2
+
+//pos = 0
+//iff_3 = src[1] > nz(xATRTrailingStop[1], 0) and src < nz(xATRTrailingStop[1], 0) ? -1 : nz(pos[1], 0)
+//pos := src[1] < nz(xATRTrailingStop[1], 0) and src > nz(xATRTrailingStop[1], 0) ? 1 : iff_3
+
+//xcolor = pos == -1 ? color.red : pos == 1 ? color.green : color.blue
+
+ema = ta.ema(src, 1)
+above = ta.crossover(ema, A_xATRTrailingStop)
+below = ta.crossover(A_xATRTrailingStop, ema)
+
+buy = src > A_xATRTrailingStop and above ? src : na
+sell = src < A_xATRTrailingStop and below ? src : na
+
+
+
+
+// # ========================================================================= #
+// #                   |   UT Bot Alerts  |
+// # ========================================================================= #
+
+
+// # ========================================================================= #
+// #                   |   Schaff Trend Cycle (STC)  |
+// # ========================================================================= #
+
+
+EEEEEE = input(80, 'Length')
+BBBB = input(27, 'FastLength')
+BBBBB = input(50, 'SlowLength')
+
+AAAA(BBB, BBBB, BBBBB) =>
+    fastMA = ta.ema(BBB, BBBB)
+    slowMA = ta.ema(BBB, BBBBB)
+    AAAA = fastMA - slowMA
+    AAAA
+
+AAAAA(EEEEEE, BBBB, BBBBB) =>
+    AAA = input(0.5)
+    var CCCCC = 0.0
+    var DDD = 0.0
+    var DDDDDD = 0.0
+    var EEEEE = 0.0
+    BBBBBB = AAAA(close, BBBB, BBBBB)
+    CCC = ta.lowest(BBBBBB, EEEEEE)
+    CCCC = ta.highest(BBBBBB, EEEEEE) - CCC
+    CCCCC := CCCC > 0 ? (BBBBBB - CCC) / CCCC * 100 : nz(CCCCC[1])
+    DDD := na(DDD[1]) ? CCCCC : DDD[1] + AAA * (CCCCC - DDD[1])
+    DDDD = ta.lowest(DDD, EEEEEE)
+    DDDDD = ta.highest(DDD, EEEEEE) - DDDD
+    DDDDDD := DDDDD > 0 ? (DDD - DDDD) / DDDDD * 100 : nz(DDDDDD[1])
+    EEEEE := na(EEEEE[1]) ? DDDDDD : EEEEE[1] + AAA * (DDDDDD - EEEEE[1])
+    EEEEE
+
+mAAAAA = AAAAA(EEEEEE, BBBB, BBBBB)
+mColor = mAAAAA > mAAAAA[1] ? color.new(color.green, 20) : color.new(color.red, 20)
+
+
+
+if mAAAAA[3] <= mAAAAA[2] and mAAAAA[2] > mAAAAA[1] and mAAAAA > 75
+    alert("Red", alert.freq_once_per_bar)
+if mAAAAA[3] >= mAAAAA[2] and mAAAAA[2] < mAAAAA[1] and mAAAAA < 25
+    alert("Green", alert.freq_once_per_bar)
+
+
+//plot(mAAAAA, color=mColor, title='STC', linewidth=2)
+
+//ul = plot(25, color=color.new(color.blue, 0))
+//ll = plot(75, color=color.new(color.yellow, 0))
+//fill(ul, ll, color=color.new(color.gray, 96))
+
+// # ========================================================================= #
+// #                   |   Schaff Trend Cycle (STC)  |
+// # ========================================================================= #
+
+
+
+
+var float entryPrice=0.0
+
+var float buyProfit=0.0
+var float buyStopValue=0.0
+var float buyPrice_stop=0.0
+
+var float sellProfit=0.0
+var float sellStopValue=0.0
+var float sellPrice_stop=0.0
+
+fromYear = input.int(defval=2022, title='From Year', minval=2020, group="Back Test Settings")
+fromMomth = input.int(defval=8, title='From Month', minval=1, maxval=12, group="Back Test Settings")
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, group="Back Test Settings")
+toYear = input.int(defval=2300, title='To Year', minval=2020, group="Back Test Settings")
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, group="Back Test Settings")
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, group="Back Test Settings")
+
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+stop_loss_and_tp = input(title='Enable Stop Loss and Take Profit', defval=true, group="Trace Stop Settings")
+trail_stop = input(title='Enable Trail Stop', defval=true, group="Trace Stop Settings")
+buy_stop_loss = input.float(0, title='buy_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+sell_stop_loss = input.float(0, title='sell_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+buy_tp = input.float(1, title='buy_tp %', step = 0.1, group="Trace Stop Settings")/100
+sell_tp = input.float(1, title='sell_tp %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_long = input.float(0.01, title='trailTrig_long %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_short = input.float(0.01, title='trailTrig_short %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_long = input.float(0.005, title='trail_stop_long %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_short = input.float(0.005, title='trail_stop_short %', step = 0.1, group="Trace Stop Settings")/100
+adxLowest = input.float(20, title='ADX Lowest', step = 0.1, group="Trade Settings")
+
+adxPass = sig > adxLowest
+buyDI = DIPlus > DIMinus
+sellDI = DIPlus < DIMinus
+buyEMA = low > emaOut
+sellEMA = high < emaOut
+// you can set your own logic here
+
+longSTC= mAAAAA > mAAAAA[1] and mAAAAA > 75
+shortSTC= mAAAAA < mAAAAA[1] and mAAAAA < 25
+
+buyCondition=longSTC and buy and adxPass
+sellCondition=shortSTC and sell and adxPass
+
+
+// you can set your own logic here
+if (strategy.position_size > 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+    if ( high >= entryPrice * (1+trailTrig_long) )
+        buyProfit := close * (1+trail_stop_long)
+        buyStopValue := buyProfit[1]
+    else
+        buyProfit := entryPrice * (1+trailTrig_long)
+
+    if ( low < entryPrice * (1+trailTrig_long) )
+        buyStopValue := entryPrice * (1 - buy_stop_loss)
+    else
+        buyStopValue := buyStopValue
+
+    buyPrice_stop := buyStopValue
+
+else if (strategy.position_size < 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+    if ( low <= entryPrice * (1-trailTrig_short) ) //Enable Trig
+        sellProfit := close * (1-trail_stop_short)
+        sellStopValue := sellProfit[1]
+    else
+        sellProfit := entryPrice * (1-trailTrig_short)
+
+    if ( high > entryPrice * (1-trailTrig_short) )
+        sellStopValue := entryPrice * (1 + sell_stop_loss)
+
+    else
+        sellStopValue := sellStopValue
+
+    sellPrice_stop := sellStopValue
+else
+    
+    buyProfit := 0
+    buyStopValue := 0
+    buyPrice_stop := 0
+    sellProfit := 0
+    sellStopValue := 0
+    sellPrice_stop := 0
+
+
+
+if(window())
+    if (buyCondition)
+
+        strategy.close('Sell', alert_message = "buy")
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        //strategy.exit('Close Buy', 'Buy', limit=stop_loss_and_tp ? entryPrice * (1 + buy_tp) : na, stop=stop_loss_and_tp ? entryPrice * (1 - buy_stop_loss) : na, trail_price=trail_stop ? entryPrice * (1+trail_stop_long) : na, trail_offset=trail_stop ? entryPrice * (1+trail_stop_long) * trail_stop_long_offset / syminfo.mintick : na, comment_trailing='close trailing', alert_message = "close")
+    if (sellCondition)
+
+        strategy.close('Buy', alert_message = "sell")
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        //strategy.exit('Close Sell', 'Sell', limit=stop_loss_and_tp ? entryPrice * (1 - sell_tp) : na, stop=stop_loss_and_tp ? entryPrice * (1 + sell_stop_loss) : na, trail_price=trail_stop ? entryPrice * (1-trail_stop_short) : na, trail_offset=trail_stop ? entryPrice * (1-trail_stop_short) * trail_stop_short_offset / syminfo.mintick: na, comment_trailing='close trailing', alert_message = "close")
+
+    if (strategy.position_size != 0)
+        strategy.exit("buyStoploss", "Buy", limit=entryPrice * (1 + buy_tp), stop=buyPrice_stop, alert_message="close")
+        strategy.exit("sellStoploss", "Sell",limit=entryPrice * (1 - sell_tp), stop=sellPrice_stop, alert_message="close")
+
+net_profit = strategy.netprofit + strategy.openprofit
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+
+
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(buy ,"buy", "", location = location.top)
+plotchar(sell ,"sell", "", location = location.top)
+plotchar(mAAAAA ,"mAAAAA", "", location = location.top)
+plotchar(longSTC ,"longSTC", "", location = location.top)
+plotchar(shortSTC ,"shortSTC", "", location = location.top)
+

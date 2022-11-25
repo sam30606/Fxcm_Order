@@ -1,0 +1,45 @@
+//@version=5
+strategy('RSI Algo Strategy', overlay=true)
+
+fromYear = input.int(defval=2022, title='From Year', minval=2020, group="Back Test Settings")
+fromMomth = input.int(defval=8, title='From Month', minval=1, maxval=12, group="Back Test Settings")
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, group="Back Test Settings")
+toYear = input.int(defval=2300, title='To Year', minval=2020, group="Back Test Settings")
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, group="Back Test Settings")
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, group="Back Test Settings")
+
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+
+myPeriod = input(defval=7, title='Period')
+myThresholdUp = input.float(defval=35, title='Upper Threshold')
+myThresholdDn = input.float(defval=35, title='Lower Threshold')
+myAlgoFlipToggle = input(defval=false, title='Imverse Algorthim')
+myLineToggle = input(defval=true, title='Show Lines')
+myLabelToggle = input(defval=true, title='Show Labels')
+myRSI = ta.rsi(close, myPeriod)
+falling_1 = ta.falling(myRSI, 1)
+cross_1 = ta.cross(myRSI, myThresholdDn)
+rising_1 = ta.rising(myRSI, 1)
+cross_2 = ta.cross(myRSI, myThresholdUp)
+buy = myAlgoFlipToggle ? falling_1 and cross_1 : rising_1 and cross_2
+rising_2 = ta.rising(myRSI, 1)
+cross_3 = ta.cross(myRSI, myThresholdUp)
+falling_2 = ta.falling(myRSI, 1)
+cross_4 = ta.cross(myRSI, myThresholdDn)
+sell = myAlgoFlipToggle ? rising_2 and cross_3 : falling_2 and cross_4
+myPosition = 0.0
+myPosition := buy == 1 ? 0 : sell == 1 or myPosition[1] == 1 ? 1 : 0
+trendColor = buy ? color.red : sell ? color.green : na
+plot(myLineToggle ? buy and myPosition[1] == 1 ? low - 0.004 : sell and myPosition[1] == 0 ? high + 0.004 : na : na, color=trendColor, style=plot.style_line, linewidth=4, editable=false)
+plotshape(myLabelToggle ? buy and myPosition[1] == 1 ? low - 0.005 : na : na, style=shape.labelup, location=location.absolute, text='Buy', textcolor=color.new(color.white, 0), color=color.new(color.black, 0), editable=false)
+plotshape(myLabelToggle ? sell and myPosition[1] == 0 ? high + 0.005 : na : na, style=shape.labeldown, location=location.absolute, text='Sell', textcolor=color.new(color.white, 0), color=color.new(color.black, 0), editable=false)
+
+if(window())
+    if buy
+        strategy.entry('RsiAlgoLP', strategy.long, comment='RsiAlgoLP')
+    if sell
+        strategy.entry('RsiAlgoSP', strategy.short, comment='RsiAlgoSP')
+

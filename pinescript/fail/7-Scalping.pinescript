@@ -1,0 +1,429 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("7-Scalping", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000,commission_value=0.036 )
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen = input.int(200, minval=1, title="Length", group="EMA Settings")
+emaSrc = input(close, title="Source", group="EMA Settings")
+offset = input.int(title="Offset", defval=0, minval=-500, maxval=500, group="EMA Settings")
+emaOut = ta.ema(emaSrc, emaLen)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+adxlen = input(14, title="ADX Smoothing", group="ADX settings")
+dilen = input(14, title="DI Length", group="ADX settings")
+dirmov(len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, len)
+	plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+	[plus, minus]
+adx(dilen, adxlen) =>
+	[plus, minus] = dirmov(dilen)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+sig = adx(dilen, adxlen)
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+adxDIlen = input(14, group="ADXDI settings")
+
+
+TrueRange = math.max(math.max(high - low, math.abs(high - nz(close[1]))), math.abs(low - nz(close[1])))
+DirectionalMovementPlus = high - nz(high[1]) > nz(low[1]) - low ? math.max(high - nz(high[1]), 0) : 0
+DirectionalMovementMinus = nz(low[1]) - low > high - nz(high[1]) ? math.max(nz(low[1]) - low, 0) : 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - nz(SmoothedTrueRange[1]) / adxDIlen + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - nz(SmoothedDirectionalMovementPlus[1]) / adxDIlen + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - nz(SmoothedDirectionalMovementMinus[1]) / adxDIlen + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+
+
+
+// # ========================================================================= #
+// #                   |   Created By Lij_MC  |
+// # ========================================================================= #
+// Created By Lij_MC
+
+
+// MA Inputs
+
+MA1_Length = input.int(5, title='Fast MA', minval=1, group='Trend Bar 1 - Settings', inline='TB1 Fast')
+MA1_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 1 - Settings', inline='TB1 Fast')
+
+MA2_Length = input.int(11, title='Slow MA', minval=1, group='Trend Bar 1 - Settings', inline='TB1 Slow')
+MA2_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 1 - Settings', inline='TB1 Slow')
+
+MA3_Length = input.int(13, title='Fast MA', minval=1, group='Trend Bar 2 - Settings', inline='TB2 Fast')
+MA3_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 2 - Settings', inline='TB2 Fast')
+
+MA4_Length = input.int(36, title='Slow MA', minval=1, group='Trend Bar 2 - Settings', inline='TB2 Slow')
+MA4_Type = input.string(title='', defval='SMA', options=['EMA', 'SMA'], group='Trend Bar 2 - Settings', inline='TB2 Slow')
+
+
+// MA Calculations
+
+Close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_on)
+
+
+MA1 = if MA1_Type == 'SMA'
+    ta.sma(Close, MA1_Length)
+else
+    ta.ema(Close, MA1_Length)
+
+
+MA2 = if MA2_Type == 'SMA'
+    ta.sma(Close, MA2_Length)
+else
+    ta.ema(Close, MA2_Length)
+
+
+MA3 = if MA3_Type == 'SMA'
+    ta.sma(Close, MA3_Length)
+else
+    ta.ema(Close, MA3_Length)
+
+
+MA4 = if MA4_Type == 'SMA'
+    ta.sma(Close, MA4_Length)
+else
+    ta.ema(Close, MA4_Length)
+
+
+// MA Crossover Condition
+
+MACrossover1 = MA1 > MA2 ? 1 : 0
+
+MACrossover2 = MA3 > MA4 ? 1 : 0
+
+
+// MACD and MOM & DAD - Top Dog Trading
+
+// Standard MACD Calculations
+
+MACDfastMA = 12
+MACDslowMA = 26
+MACDsignalSmooth = 9
+
+
+MACDLine = ta.ema(close, MACDfastMA) - ta.ema(close, MACDslowMA)
+
+SignalLine = ta.ema(MACDLine, MACDsignalSmooth)
+
+MACDHistogram = MACDLine - SignalLine
+
+
+// MACD- Background Color Change Condition
+
+MACDHistogramCross = MACDHistogram > 0 ? 1 : 0
+
+MACDLineOverZero = MACDLine > 0 ? 1 : 0
+
+MACDLineOverZeroandHistogramCross = MACDHistogramCross and MACDLineOverZero ? 1 : 0
+
+MACDLineUnderZeroandHistogramCross = not MACDHistogramCross and not MACDLineOverZero ? 1 : 0
+
+
+// Fast MACD Calculations
+
+FastMACDfastMA = 8
+FastMACDslowMA = 21
+FastMACDsignalSmooth = 5
+
+
+FastMACDLine = ta.ema(close, FastMACDfastMA) - ta.ema(close, FastMACDslowMA)
+
+FastSignalLine = ta.ema(FastMACDLine, FastMACDsignalSmooth)
+
+FastMACDHistogram = FastMACDLine - FastSignalLine
+
+// Fast MACD- Background Color Change Condition
+
+FastMACDHistogramCross = FastMACDHistogram > 0 ? 1 : 0
+
+// RSI 5 Trend Barmeter Calculations
+
+RSI5 = ta.rsi(close, 5)
+
+RSI5Above50 = RSI5 > 50 ? 1 : 0
+
+
+// RSI 5 Trend Barmeter Calculations
+
+RSI13 = ta.rsi(close, 13)
+
+
+// Linear Regression Calculation For RSI Signal Line
+
+SignalLineLength1 = 21
+
+x = bar_index
+y = RSI13
+x_ = ta.sma(x, SignalLineLength1)
+y_ = ta.sma(y, SignalLineLength1)
+mx = ta.stdev(x, SignalLineLength1)
+my = ta.stdev(y, SignalLineLength1)
+c = ta.correlation(x, y, SignalLineLength1)
+slope = c * (my / mx)
+inter = y_ - slope * x_
+LinReg1 = x * slope + inter
+
+
+RSISigDirection = LinReg1 > LinReg1[1] ? 1 : 0
+
+RSISigCross = RSI13 > LinReg1 ? 1 : 0
+
+RSI13Above50 = RSI13 > 50 ? 1 : 0
+
+green = FastMACDHistogramCross and RSI13Above50 and RSI5Above50 and MACrossover1 and MACrossover2
+red = not FastMACDHistogramCross and not RSI13Above50 and not RSI5Above50 and not MACrossover1 and not MACrossover2
+//plot(green ? 135 : na, title='green', style=plot.style_circles, color=color.new(color.green, 15), linewidth=2, transp=18)
+//plot(red ? 135 : na, title='red', style=plot.style_circles, color=color.new(color.red, 20), linewidth=2, transp=18)
+
+// # ========================================================================= #
+// #                   |   Created By Lij_MC  |
+// # ========================================================================= #
+
+
+// # ========================================================================= #
+// #                   |   QQE MOD  |
+// # ========================================================================= #
+//By Glaz, Modified
+
+RSI_Period = input(6, title='RSI Length')
+SF = input(5, title='RSI Smoothing')
+QQE = input(3, title='Fast QQE Factor')
+ThreshHold = input(3, title='Thresh-hold')
+//
+
+src = input(close, title='RSI Source')
+//
+
+//
+Wilders_Period = RSI_Period * 2 - 1
+
+
+Rsi = ta.rsi(src, RSI_Period)
+RsiMa = ta.ema(Rsi, SF)
+AtrRsi = math.abs(RsiMa[1] - RsiMa)
+MaAtrRsi = ta.ema(AtrRsi, Wilders_Period)
+dar = ta.ema(MaAtrRsi, Wilders_Period) * QQE
+
+longband = 0.0
+shortband = 0.0
+trend = 0
+
+DeltaFastAtrRsi = dar
+RSIndex = RsiMa
+newshortband = RSIndex + DeltaFastAtrRsi
+newlongband = RSIndex - DeltaFastAtrRsi
+longband := RSIndex[1] > longband[1] and RSIndex > longband[1] ? math.max(longband[1], newlongband) : newlongband
+shortband := RSIndex[1] < shortband[1] and RSIndex < shortband[1] ? math.min(shortband[1], newshortband) : newshortband
+cross_1 = ta.cross(longband[1], RSIndex)
+trend := ta.cross(RSIndex, shortband[1]) ? 1 : cross_1 ? -1 : nz(trend[1], 1)
+FastAtrRsiTL = trend == 1 ? longband : shortband
+////////////////////
+
+
+length = input.int(50, minval=1, title='Bollinger Length')
+mult = input.float(0.35, minval=0.001, maxval=5, step=0.1, title='BB Multiplier')
+basis = ta.sma(FastAtrRsiTL - 50, length)
+dev = mult * ta.stdev(FastAtrRsiTL - 50, length)
+upper = basis + dev
+lower = basis - dev
+color_bar = RsiMa - 50 > upper ? #00c3ff : RsiMa - 50 < lower ? #ff0062 : color.gray
+
+
+//
+// Zero cross
+QQEzlong = 0
+QQEzlong := nz(QQEzlong[1])
+QQEzshort = 0
+QQEzshort := nz(QQEzshort[1])
+QQEzlong := RSIndex >= 50 ? QQEzlong + 1 : 0
+QQEzshort := RSIndex < 50 ? QQEzshort + 1 : 0
+//  
+
+Zero = hline(0, color=color.white, linestyle=hline.style_dotted, linewidth=1)
+
+////////////////////////////////////////////////////////////////
+
+RSI_Period2 = input(6, title='RSI Length')
+SF2 = input(5, title='RSI Smoothing')
+QQE2 = input(1.61, title='Fast QQE2 Factor')
+ThreshHold2 = input(3, title='Thresh-hold')
+
+src2 = input(close, title='RSI Source')
+//
+
+//
+Wilders_Period2 = RSI_Period2 * 2 - 1
+
+
+Rsi2 = ta.rsi(src2, RSI_Period2)
+RsiMa2 = ta.ema(Rsi2, SF2)
+AtrRsi2 = math.abs(RsiMa2[1] - RsiMa2)
+MaAtrRsi2 = ta.ema(AtrRsi2, Wilders_Period2)
+dar2 = ta.ema(MaAtrRsi2, Wilders_Period2) * QQE2
+longband2 = 0.0
+shortband2 = 0.0
+trend2 = 0
+
+DeltaFastAtrRsi2 = dar2
+RSIndex2 = RsiMa2
+newshortband2 = RSIndex2 + DeltaFastAtrRsi2
+newlongband2 = RSIndex2 - DeltaFastAtrRsi2
+longband2 := RSIndex2[1] > longband2[1] and RSIndex2 > longband2[1] ? math.max(longband2[1], newlongband2) : newlongband2
+shortband2 := RSIndex2[1] < shortband2[1] and RSIndex2 < shortband2[1] ? math.min(shortband2[1], newshortband2) : newshortband2
+cross_2 = ta.cross(longband2[1], RSIndex2)
+trend2 := ta.cross(RSIndex2, shortband2[1]) ? 1 : cross_2 ? -1 : nz(trend2[1], 1)
+FastAtrRsi2TL = trend2 == 1 ? longband2 : shortband2
+
+//plot(FastAtrRsi2TL - 50, title='QQE Line', color=color.new(color.white, 0), linewidth=2)
+
+QQELine = FastAtrRsi2TL - 50
+
+// # ========================================================================= #
+// #                   |   QQE MOD  |
+// # ========================================================================= #
+
+
+var float entryPrice = 0.0
+var float enableTrigPrice = 0.0
+var float buyATRLoss = 0.0
+var float sellATRLoss = 0.0
+var float price_stop = 0.0
+var float price_limit = 0.0
+
+var bool trailTrigEnable = false
+fromYear = input.int(defval=2022, title='From Year', minval=2020, group="Back Test Settings")
+fromMomth = input.int(defval=8, title='From Month', minval=1, maxval=12, group="Back Test Settings")
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, group="Back Test Settings")
+toYear = input.int(defval=2300, title='To Year', minval=2020, group="Back Test Settings")
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, group="Back Test Settings")
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, group="Back Test Settings")
+
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+stop_loss_and_tp = input(title='Enable Stop Loss and Take Profit', defval=true, group="Trace Stop Settings")
+trail_stop = input(title='Enable Trail Stop', defval=true, group="Trace Stop Settings")
+buy_stop_loss = input.float(1, title='buy_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+sell_stop_loss = input.float(1, title='sell_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+buy_tp = input.float(1, title='buy_tp %', step = 0.1, group="Trace Stop Settings")/100
+sell_tp = input.float(1, title='sell_tp %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_long = input.float(0.01, title='trailTrig_long %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_short = input.float(0.01, title='trailTrig_short %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_long = input.float(0.005, title='trail_stop_long %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_short = input.float(0.005, title='trail_stop_short %', step = 0.1, group="Trace Stop Settings")/100
+adxLowest = input.float(20, title='ADX Lowest', step = 0.1, group="Trade Settings")
+
+adxPass = sig > adxLowest
+buyDI = DIPlus > DIMinus
+sellDI = DIPlus < DIMinus
+buyEMA = low > emaOut
+sellEMA = high < emaOut
+// you can set your own logic here
+
+buyTrendMeter = green
+sellTrendMeter = red
+buyQQE = QQELine > 0
+sellQQE = QQELine < 0
+
+buyCondition = adxPass and buyEMA and buyTrendMeter and buyQQE
+sellCondition = adxPass and sellEMA and sellTrendMeter and sellQQE
+
+
+// you can set your own logic here
+if (strategy.position_size > 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+    enableTrigPrice := enableTrigPrice ? enableTrigPrice : entryPrice
+    if (close >= enableTrigPrice * (1 + trailTrig_long))
+        trailTrigEnable := true
+        price_stop := enableTrigPrice * (1 + trail_stop_long)
+        enableTrigPrice := price_stop
+    else if (close < entryPrice * (1 + trailTrig_long) and trailTrigEnable == false)
+        price_stop := entryPrice * (1 - buy_stop_loss)
+
+
+else if (strategy.position_size < 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1) 
+    enableTrigPrice := enableTrigPrice ? enableTrigPrice : entryPrice
+    if (close <= enableTrigPrice * (1 - trailTrig_short))
+        trailTrigEnable := true
+        price_stop := enableTrigPrice * (1 - trail_stop_short)
+        enableTrigPrice := price_stop
+    else if (close > entryPrice * (1 - trailTrig_short) and trailTrigEnable == false)
+        price_stop := entryPrice * (1 + sell_stop_loss)
+
+else
+    entryPrice := 0
+    price_stop := 0
+    enableTrigPrice := 0
+    trailTrigEnable := false
+
+
+if(window())
+    if (buyCondition)
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+
+    if (sellCondition)
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+
+    if (strategy.position_size != 0)
+        strategy.exit("buyStoploss", "Buy", limit=entryPrice * (1 + buy_tp), stop=price_stop, alert_message="close")
+        strategy.exit("sellStoploss", "Sell",limit=entryPrice * (1 - sell_tp), stop=price_stop, alert_message="close")
+
+net_profit = strategy.netprofit + strategy.openprofit
+
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(price_limit, "price_limit", "", location = location.top)
+plotchar(price_stop, "price_stop", "", location = location.top)
+
+
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)

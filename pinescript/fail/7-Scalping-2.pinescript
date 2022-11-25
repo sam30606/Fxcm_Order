@@ -1,0 +1,497 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("7-Scalping-2", shorttitle="7-Scalping-2", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000,commission_value=0.036 )
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+var groupEMA = "EMA Settings"
+
+emaLen = input.int(60, minval=1, title="Length", group=groupEMA)
+emaSrc = input(close, title="Source", group=groupEMA)
+emaOut = ta.ema(emaSrc, emaLen)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+var groupADX = "Average Directional Index Settings"
+
+enableADX = input.bool(1, title = "Enable ADX?", group = groupADX) 
+timeADX = input.timeframe('5', "Timeframe", group=groupADX)
+lenADX = input(14, title="ADX Smoothing", group=groupADX)
+lenDI = input(14, title="DI Length", group=groupADX)
+lowestADX = input.float(32, title='ADX Lowest', step = 0.1, group=groupADX)
+
+dirmov(_len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, _len)
+	plus = fixnan(100 * ta.rma(plusDM, _len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, _len) / truerange)
+	[plus, minus]
+adx(lenDI, lenADX) =>
+	[plus, minus] = dirmov(lenDI)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lenADX)
+sig = request.security(syminfo.tickerid, timeADX, adx(lenDI, lenADX))
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+// @author LazyBear
+var groupVFI = "Volume Flow Indicator Settings"
+
+enableVFI = input.bool(1, title = "Enable VFI?", group = groupVFI) 
+lengthVFI = input(130, title='VFI length', group = groupVFI)
+coef = input.float(1, group = groupVFI)
+vcoef = input.float(3.4, title='Max. vol. cutoff', group = groupVFI)
+smoothVFI = input(false, group = groupVFI)
+
+ma(x, y) =>
+    sma_1 = ta.sma(x, y)
+    smoothVFI ? sma_1 : x
+
+typical = hlc3
+inter = math.log(typical) - math.log(typical[1])
+vinter = ta.stdev(inter, 30)
+cutoff = coef * vinter * close
+vave = ta.sma(volume, lengthVFI)[1]
+vmax = vave * vcoef
+vc = volume < vmax ? volume : vmax  //min( volume, vmax )
+mf = typical - typical[1]
+iff_1 = mf < -cutoff ? -vc : 0
+vcp = mf > cutoff ? vc : iff_1
+
+vfi = ma(math.sum(vcp, lengthVFI) / vave, 3)
+
+//plot(vfi, title='vfi', color=color.new(color.green, 0), linewidth=2)
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+adxDIlen = input(14, group="ADXDI settings")
+
+
+TrueRange = math.max(math.max(high - low, math.abs(high - nz(close[1]))), math.abs(low - nz(close[1])))
+DirectionalMovementPlus = high - nz(high[1]) > nz(low[1]) - low ? math.max(high - nz(high[1]), 0) : 0
+DirectionalMovementMinus = nz(low[1]) - low > high - nz(high[1]) ? math.max(nz(low[1]) - low, 0) : 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - nz(SmoothedTrueRange[1]) / adxDIlen + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - nz(SmoothedDirectionalMovementPlus[1]) / adxDIlen + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - nz(SmoothedDirectionalMovementMinus[1]) / adxDIlen + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+var groupATR = "ATR Bands Settings"
+
+// Inputs
+atrPeriod = input.int(title='ATR Period', defval=14, minval=1, group = groupATR)
+srcUpper = input(title='Source Upper', defval=close, inline = "ATRSource", group = groupATR)
+srcLower = input(title='Source Lower', defval=close, inline = "ATRSource",group = groupATR)
+atrMultiplierUpper = input.float(title='ATR Multiplier Upper', defval=3, inline = "ATRMult",group = groupATR)
+atrMultiplierLower = input.float(title='ATR Multiplier Lower', defval=3, inline = "ATRMult",group = groupATR)
+
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Plotting
+//plot(srcUpper + atr * atrMultiplierUpper, color=color.new(color.green, 0))
+//plot(srcLower - atr * atrMultiplierLower, color=color.new(color.red, 0))
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Created By Lij_MC  |
+// # ========================================================================= #
+// Created By Lij_MC
+
+
+// MA Inputs
+
+MA1_Length = input.int(5, title='Fast MA', minval=1, group='Trend Bar 1 - Settings', inline='TB1 Fast')
+MA1_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 1 - Settings', inline='TB1 Fast')
+
+MA2_Length = input.int(11, title='Slow MA', minval=1, group='Trend Bar 1 - Settings', inline='TB1 Slow')
+MA2_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 1 - Settings', inline='TB1 Slow')
+
+MA3_Length = input.int(13, title='Fast MA', minval=1, group='Trend Bar 2 - Settings', inline='TB2 Fast')
+MA3_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 2 - Settings', inline='TB2 Fast')
+
+MA4_Length = input.int(36, title='Slow MA', minval=1, group='Trend Bar 2 - Settings', inline='TB2 Slow')
+MA4_Type = input.string(title='', defval='SMA', options=['EMA', 'SMA'], group='Trend Bar 2 - Settings', inline='TB2 Slow')
+
+
+// MA Calculations
+
+Close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_on)
+
+
+MA1 = if MA1_Type == 'SMA'
+    ta.sma(Close, MA1_Length)
+else
+    ta.ema(Close, MA1_Length)
+
+
+MA2 = if MA2_Type == 'SMA'
+    ta.sma(Close, MA2_Length)
+else
+    ta.ema(Close, MA2_Length)
+
+
+MA3 = if MA3_Type == 'SMA'
+    ta.sma(Close, MA3_Length)
+else
+    ta.ema(Close, MA3_Length)
+
+
+MA4 = if MA4_Type == 'SMA'
+    ta.sma(Close, MA4_Length)
+else
+    ta.ema(Close, MA4_Length)
+
+
+// MA Crossover Condition
+
+MACrossover1 = MA1 > MA2 ? 1 : 0
+
+MACrossover2 = MA3 > MA4 ? 1 : 0
+
+
+// MACD and MOM & DAD - Top Dog Trading
+
+// Standard MACD Calculations
+
+MACDfastMA = 12
+MACDslowMA = 26
+MACDsignalSmooth = 9
+
+
+MACDLine = ta.ema(close, MACDfastMA) - ta.ema(close, MACDslowMA)
+
+SignalLine = ta.ema(MACDLine, MACDsignalSmooth)
+
+MACDHistogram = MACDLine - SignalLine
+
+
+// MACD- Background Color Change Condition
+
+MACDHistogramCross = MACDHistogram > 0 ? 1 : 0
+
+MACDLineOverZero = MACDLine > 0 ? 1 : 0
+
+MACDLineOverZeroandHistogramCross = MACDHistogramCross and MACDLineOverZero ? 1 : 0
+
+MACDLineUnderZeroandHistogramCross = not MACDHistogramCross and not MACDLineOverZero ? 1 : 0
+
+
+// Fast MACD Calculations
+
+FastMACDfastMA = 8
+FastMACDslowMA = 21
+FastMACDsignalSmooth = 5
+
+
+FastMACDLine = ta.ema(close, FastMACDfastMA) - ta.ema(close, FastMACDslowMA)
+
+FastSignalLine = ta.ema(FastMACDLine, FastMACDsignalSmooth)
+
+FastMACDHistogram = FastMACDLine - FastSignalLine
+
+// Fast MACD- Background Color Change Condition
+
+FastMACDHistogramCross = FastMACDHistogram > 0 ? 1 : 0
+
+// RSI 5 Trend Barmeter Calculations
+
+RSI5 = ta.rsi(close, 5)
+
+RSI5Above50 = RSI5 > 50 ? 1 : 0
+
+
+// RSI 5 Trend Barmeter Calculations
+
+RSI13 = ta.rsi(close, 13)
+
+
+// Linear Regression Calculation For RSI Signal Line
+
+SignalLineLength1 = 21
+
+x = bar_index
+y = RSI13
+x_ = ta.sma(x, SignalLineLength1)
+y_ = ta.sma(y, SignalLineLength1)
+mx = ta.stdev(x, SignalLineLength1)
+my = ta.stdev(y, SignalLineLength1)
+c = ta.correlation(x, y, SignalLineLength1)
+slope = c * (my / mx)
+interp = y_ - slope * x_
+LinReg1 = x * slope + interp
+
+
+RSISigDirection = LinReg1 > LinReg1[1] ? 1 : 0
+
+RSISigCross = RSI13 > LinReg1 ? 1 : 0
+
+RSI13Above50 = RSI13 > 50 ? 1 : 0
+
+green = FastMACDHistogramCross and RSI13Above50 and RSI5Above50 and MACrossover1 and MACrossover2
+red = not FastMACDHistogramCross and not RSI13Above50 and not RSI5Above50 and not MACrossover1 and not MACrossover2
+//plot(green ? 135 : na, title='green', style=plot.style_circles, color=color.new(color.green, 15), linewidth=2, transp=18)
+//plot(red ? 135 : na, title='red', style=plot.style_circles, color=color.new(color.red, 20), linewidth=2, transp=18)
+
+// # ========================================================================= #
+// #                   |   Created By Lij_MC  |
+// # ========================================================================= #
+
+
+// # ========================================================================= #
+// #                   |   QQE MOD  |
+// # ========================================================================= #
+//By Glaz, Modified
+
+RSI_Period = input(6, title='RSI Length')
+SF = input(5, title='RSI Smoothing')
+QQE = input(3, title='Fast QQE Factor')
+ThreshHold = input(3, title='Thresh-hold')
+//
+
+src = input(close, title='RSI Source')
+//
+
+//
+Wilders_Period = RSI_Period * 2 - 1
+
+
+Rsi = ta.rsi(src, RSI_Period)
+RsiMa = ta.ema(Rsi, SF)
+AtrRsi = math.abs(RsiMa[1] - RsiMa)
+MaAtrRsi = ta.ema(AtrRsi, Wilders_Period)
+dar = ta.ema(MaAtrRsi, Wilders_Period) * QQE
+
+longband = 0.0
+shortband = 0.0
+trend = 0
+
+DeltaFastAtrRsi = dar
+RSIndex = RsiMa
+newshortband = RSIndex + DeltaFastAtrRsi
+newlongband = RSIndex - DeltaFastAtrRsi
+longband := RSIndex[1] > longband[1] and RSIndex > longband[1] ? math.max(longband[1], newlongband) : newlongband
+shortband := RSIndex[1] < shortband[1] and RSIndex < shortband[1] ? math.min(shortband[1], newshortband) : newshortband
+cross_1 = ta.cross(longband[1], RSIndex)
+trend := ta.cross(RSIndex, shortband[1]) ? 1 : cross_1 ? -1 : nz(trend[1], 1)
+FastAtrRsiTL = trend == 1 ? longband : shortband
+////////////////////
+
+
+length = input.int(50, minval=1, title='Bollinger Length')
+mult = input.float(0.35, minval=0.001, maxval=5, step=0.1, title='BB Multiplier')
+basis = ta.sma(FastAtrRsiTL - 50, length)
+dev = mult * ta.stdev(FastAtrRsiTL - 50, length)
+upper = basis + dev
+lower = basis - dev
+color_bar = RsiMa - 50 > upper ? #00c3ff : RsiMa - 50 < lower ? #ff0062 : color.gray
+
+
+//
+// Zero cross
+QQEzlong = 0
+QQEzlong := nz(QQEzlong[1])
+QQEzshort = 0
+QQEzshort := nz(QQEzshort[1])
+QQEzlong := RSIndex >= 50 ? QQEzlong + 1 : 0
+QQEzshort := RSIndex < 50 ? QQEzshort + 1 : 0
+//  
+
+Zero = hline(0, color=color.white, linestyle=hline.style_dotted, linewidth=1)
+
+////////////////////////////////////////////////////////////////
+
+RSI_Period2 = input(6, title='RSI Length')
+SF2 = input(5, title='RSI Smoothing')
+QQE2 = input(1.61, title='Fast QQE2 Factor')
+ThreshHold2 = input(3, title='Thresh-hold')
+
+src2 = input(close, title='RSI Source')
+//
+
+//
+Wilders_Period2 = RSI_Period2 * 2 - 1
+
+
+Rsi2 = ta.rsi(src2, RSI_Period2)
+RsiMa2 = ta.ema(Rsi2, SF2)
+AtrRsi2 = math.abs(RsiMa2[1] - RsiMa2)
+MaAtrRsi2 = ta.ema(AtrRsi2, Wilders_Period2)
+dar2 = ta.ema(MaAtrRsi2, Wilders_Period2) * QQE2
+longband2 = 0.0
+shortband2 = 0.0
+trend2 = 0
+
+DeltaFastAtrRsi2 = dar2
+RSIndex2 = RsiMa2
+newshortband2 = RSIndex2 + DeltaFastAtrRsi2
+newlongband2 = RSIndex2 - DeltaFastAtrRsi2
+longband2 := RSIndex2[1] > longband2[1] and RSIndex2 > longband2[1] ? math.max(longband2[1], newlongband2) : newlongband2
+shortband2 := RSIndex2[1] < shortband2[1] and RSIndex2 < shortband2[1] ? math.min(shortband2[1], newshortband2) : newshortband2
+cross_2 = ta.cross(longband2[1], RSIndex2)
+trend2 := ta.cross(RSIndex2, shortband2[1]) ? 1 : cross_2 ? -1 : nz(trend2[1], 1)
+FastAtrRsi2TL = trend2 == 1 ? longband2 : shortband2
+
+//plot(FastAtrRsi2TL - 50, title='QQE Line', color=color.new(color.white, 0), linewidth=2)
+
+QQELine = FastAtrRsi2TL - 50
+
+// # ========================================================================= #
+// #                   |   QQE MOD  |
+// # ========================================================================= #
+
+var entryPrice = 0.0
+var priceLimit = 0.0
+var priceStop = 0.0
+var tradeDay = false
+var groupBackTest ="Back Test Settings"
+
+fromYear = input.int(defval=2022, title='From Year', minval=2020, inline = "BTFrom", group=groupBackTest)
+fromMomth = input.int(defval=1, title='From Month', minval=1, maxval=12, inline = "BTFrom", group=groupBackTest)
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, inline = "BTFrom", group=groupBackTest)
+toYear = input.int(defval=2300, title='To Year', minval=2020, inline = "BTTo", group=groupBackTest)
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, inline = "BTTo", group=groupBackTest)
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, inline = "BTTo", group=groupBackTest)
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+var groupTrade = "Trade Settings"
+
+
+ratioRR = input.float(1, title='R/R Ratio', step = 0.1, group=groupTrade)
+leverage = input.float(10, title='Leverage', step = 0.1, group=groupTrade)
+
+dd1 = input.bool(0, title='Sun',inline = "tradeDay", group=groupTrade)
+dd2 = input.bool(0, title='Mon', inline = "tradeDay", group=groupTrade)
+dd3 = input.bool(0, title='Tues', inline = "tradeDay", group=groupTrade)
+dd4 = input.bool(0, title='Wed', inline = "tradeDay", group=groupTrade)
+dd5 = input.bool(0, title='Thur', inline = "tradeDay", group=groupTrade)
+dd6 = input.bool(0, title='Fri', inline = "tradeDay", group=groupTrade)
+dd7 = input.bool(0, title='Sat', inline = "tradeDay", group=groupTrade)
+
+dayweek = dayofweek(time = time, timezone = 'America/New_York' )
+
+tradeDay := switch dayweek
+    1 => dd1
+    2 => dd2
+    3 => dd3
+    4 => dd4
+    5 => dd5
+    6 => dd6
+    7 => dd7
+    => false
+
+
+
+passADX = enableADX ? sig > lowestADX : true
+
+buyVFI = enableVFI ? vfi > 0 : true
+sellVFI = enableVFI ? vfi < 0 : true
+
+buyDI = DIPlus > DIMinus
+sellDI = DIPlus < DIMinus
+
+buyEMA = close > emaOut
+sellEMA = close < emaOut
+
+buyfilters = passADX and tradeDay and buyVFI and buyDI and buyEMA
+sellfilters = passADX and tradeDay and sellVFI and sellDI and sellEMA
+
+// you can set your own logic here
+
+buyTrendMeter = green
+sellTrendMeter = red
+buyQQE = QQELine > 0
+sellQQE = QQELine < 0
+
+
+buyCondition = buyfilters and strategy.position_size == 0 and buyTrendMeter and buyQQE
+sellCondition = sellfilters and strategy.position_size == 0 and sellTrendMeter and sellQQE
+
+if (strategy.position_size != 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+else
+    entryPrice := 0.0
+    priceLimit := 0.0
+    priceStop := 0.0
+// you can set your own logic here
+
+if(window())
+    if (buyCondition)
+        priceStop := srcLower - atr * atrMultiplierLower
+        priceLimit := close + (close - priceStop) * ratioRR 
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        strategy.exit("buyStoploss", "Buy", limit=priceLimit, stop=priceStop, alert_message="close")
+    if (sellCondition)
+        priceStop := srcUpper + atr * atrMultiplierUpper
+        priceLimit := close - (priceStop - close) * ratioRR
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        strategy.exit("sellStoploss", "Sell",limit=priceLimit, stop=priceStop, alert_message="close")
+        
+net_profit = strategy.netprofit + strategy.openprofit
+
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(priceLimit, "priceLimit", "", location = location.top)
+plotchar(priceStop, "priceStop", "", location = location.top)
+
+
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)
+
+
+plotchar(passADX, "passADX", "", location = location.top)
+plotchar(buyVFI, "buyVFI", "", location = location.top)
+plotchar(sellVFI, "sellVFI", "", location = location.top)
+plotchar(buyfilters, "buyfilters", "", location = location.top)
+plotchar(sellfilters, "sellfilters", "", location = location.top)
+plotchar(tradeDay, "tradeDay", "", location = location.top)
+plotchar(dayofweek(time = time, timezone = 'America/New_York' ) , "dayofweek(time = dayofweek, timezone = 'America/New_York' ) ", "", location = location.top)

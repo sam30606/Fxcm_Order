@@ -1,0 +1,237 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("MACD+ATR", shorttitle="MACD+ATR", overlay=true)
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+var bool grow_above=false
+var bool fall_above=false
+var bool grow_below=false
+var bool fall_below=false
+var int buyCondition=0
+var int sellCondition=0
+var float lowest1=0
+var float lowest2=0
+var float lowest3=0
+var float highest1=0
+var float highest2=0
+var float highest3=0
+var float hist1_above=0
+var float hist2_above=0
+var float hist3_above=0
+var float hist1_below=0
+var float hist2_below=0
+var float hist3_below=0
+var bool lowestCondition=false
+var bool highestCondition=false
+var bool lowestExist=false
+var bool highestExist=false
+var bool histBelowExist=false
+var bool histAboveExist=false
+
+
+
+// Getting inputs
+fast_length = input(title="Fast Length", defval=13)
+slow_length = input(title="Slow Length", defval=34)
+src = input(title="Source", defval=close)
+signal_length = input.int(title="Signal Smoothing",  minval = 1, maxval = 50, defval = 9)
+sma_source = input.string(title="Oscillator MA Type",  defval="EMA", options=["SMA", "EMA"])
+sma_signal = input.string(title="Signal Line MA Type", defval="EMA", options=["SMA", "EMA"])
+// Plot colors
+//col_macd = input(#2962FF, "MACD Line", group="Color Settings", inline="MACD")
+//col_signal = input(#FF6D00, "Signal Line", group="Color Settings", inline="Signal")
+//col_grow_above = input(#26A69A, "Above Grow", group="Histogram", inline="Above")
+//col_fall_above = input(#B2DFDB, "Fall", group="Histogram", inline="Above")
+//col_grow_below = input(#FFCDD2, "Below Grow", group="Histogram", inline="Below")
+//col_fall_below = input(#FF5252, "Fall", group="Histogram", inline="Below")
+// Calculating
+fast_ma = sma_source == "SMA" ? ta.sma(src, fast_length) : ta.ema(src, fast_length)
+slow_ma = sma_source == "SMA" ? ta.sma(src, slow_length) : ta.ema(src, slow_length)
+macd = fast_ma - slow_ma
+signal = sma_signal == "SMA" ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+hist = macd - signal
+//hline(0, "Zero Line", color=color.new(#787B86, 50))
+//plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)))
+//lot(macd, title="MACD", color=col_macd)
+//plot(signal, title="Signal", color=col_signal)
+
+// # ========================================================================= #
+// #                   |   ATR  |
+// # ========================================================================= #
+
+length = input.int(title="Length", defval=13, minval=1)
+smoothing = input.string(title="Smoothing", defval="RMA", options=["RMA", "SMA", "EMA", "WMA"])
+ma_function(source, length) =>
+	switch smoothing
+		"RMA" => ta.rma(source, length)
+		"SMA" => ta.sma(source, length)
+		"EMA" => ta.ema(source, length)
+		=> ta.wma(source, length)
+//plot(ma_function(ta.tr(true), length), title = "ATR", color=color.new(#B71C1C, 0))
+atrValue=ma_function(ta.tr(true), length)
+// # ========================================================================= #
+// #                   |   ATR  |
+// # ========================================================================= #
+
+
+if (hist>=0)
+    if (hist[1] < hist)
+        grow_above:=true
+    else
+        fall_above:=true
+    grow_below:=false
+    fall_below:=false
+    buyCondition:=0
+    lowest1:=0
+    lowest2:=0
+    lowest3:=0
+else
+    if (hist[1] < hist)
+        grow_below:=true
+    else
+        fall_below:=true
+    grow_above:=false
+    fall_above:=false
+    sellCondition:=0
+    highest1:=0
+    highest2:=0
+    highest3:=0
+
+if (grow_below==true and fall_below==true and hist<=-0.0007)
+    grow_below:=false
+    fall_below:=false
+    buyCondition+=1
+    lowest1:=lowest1?lowest1:(low)[1]
+    lowest2:=(lowest1!=(low)[1]?(lowest2?lowest2:(low)[1]):0)
+    lowest3:=(lowest1!=(low)[1] and lowest2!=(low)[1]?(lowest3 and lowest3<(low)[1]?lowest3:(low)[1]):0)
+    hist1_below:=hist1_below?hist1_below:hist[1]
+    hist2_below:=(hist1_below!=hist[1]?(hist2_below?hist2_below:hist[1]):0)
+    hist3_below:=(hist1_below!=hist[1] and hist2_below!=hist[1]?(hist3_below and hist3_below<hist[1]?hist3_below:hist[1]):0)
+else
+    grow_below:=false
+
+
+
+if (grow_above==true and fall_above==true and hist>=0.0007)
+    grow_above:=false
+    fall_above:=false
+    sellCondition+=1
+    highest1:=highest1?highest1:(high)[1]
+    highest2:=(highest1!=(high)[1]?(highest2?highest2:(high)[1]):0)
+    highest3:=(highest1!=(high)[1] and highest2!=(high)[1]?(highest3>(high)[1]?highest3:(high)[1]):0)
+    hist1_above:=hist1_above?hist1_above:hist[1]
+    hist2_above:=(hist1_above!=hist[1]?(hist2_above?hist2_above:hist[1]):0)
+    hist3_above:=(hist1_above!=hist[1] and hist2_above!=hist[1]?(hist3_above and hist3_above<hist[1]?hist3_above:hist[1]):0)
+else
+    fall_above:=false
+    
+
+if(hist>-0.0007)
+    buyCondition:=0
+    lowest1:=0
+    lowest2:=0
+    lowest3:=0
+    hist1_below:=0
+    hist2_below:=0
+    hist3_below:=0
+if(hist<0.0007)
+    sellCondition:=0
+    highest1:=0
+    highest2:=0
+    highest3:=0
+    hist1_above:=0
+    hist2_above:=0
+    hist3_above:=0
+
+lowestExist:=((lowest1 and lowest2 and lowest3)?((lowest1>lowest2 and lowest2>lowest3)?true:false):false)
+highestExist:=((highest1 and highest2 and highest3)?((highest1<highest2 and highest2<highest3)?true:false):false)
+histBelowExist:=((hist1_below and hist2_below and hist3_below)?((hist1_below<hist2_below and hist2_below<hist3_below)?true:false):false)
+histAboveExist:=((hist1_above and hist2_above and hist3_above)?((hist1_above>hist2_above and hist2_above>hist3_above)?true:false):false)
+
+if(lowestExist and histBelowExist)
+    lowestCondition:=true
+    lowest1:=0
+    lowest2:=0
+    lowest3:=0
+    hist1_below:=0
+    hist2_below:=0
+    hist3_below:=0
+
+if(highestExist and histAboveExist)
+    highestCondition:=true
+    highest1:=0
+    highest2:=0
+    highest3:=0
+    hist1_above:=0
+    hist2_above:=0
+    hist3_above:=0
+
+if (buyCondition>=3 and lowestCondition)
+    strategy.entry("BUY", strategy.long ,alert_message = "buy")
+    // if (sellCondition>=3)
+    //     strategy.close("BUY" ,alert_message = "colse buy ")
+    strategy.exit("CLOSE BUY","BUY",limit=(close)*1.1,stop=(close)*0.95, alert_message="做空 10%止盈/5%止損")
+    sellCondition:=0
+    buyCondition:=0
+    grow_above:=false
+    fall_above:=false
+    grow_below:=false
+    fall_below:=false
+    lowestCondition:=false
+    highestCondition:=false
+
+if (sellCondition>=3 and highestCondition)
+    strategy.entry("SELL",strategy.short ,alert_message = "sell")
+    // if (buyCondition>=3)
+    //     strategy.close("SELL" ,alert_message = "colse sell ")
+    strategy.exit("CLOSE SELL","SELL",limit=(close)*0.9, stop=(close)*1.05,alert_message="做空 10%止盈/5%止損")
+    sellCondition:=0
+    buyCondition:=0
+    grow_above:=false
+    fall_above:=false
+    grow_below:=false
+    fall_below:=false
+    lowestCondition:=false
+    highestCondition:=false
+
+
+plotchar(hist, "hist", "", location = location.top)
+plotchar(highest1, "highest1", "", location = location.top)
+plotchar(highest2, "highest2", "", location = location.top)
+plotchar(highest3, "highest3", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)
+plotchar(highestCondition, "highestCondition", "", location = location.top)
+plotchar((low)+atrValue, "sellStop", "", location = location.top)
+
+plotchar(lowest1, "lowest1", "", location = location.top)
+plotchar(lowest2, "lowest2", "", location = location.top)
+plotchar(lowest3, "lowest3", "", location = location.top)
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(lowestCondition, "lowestCondition", "", location = location.top)
+plotchar((low)-atrValue, "buyStop", "", location = location.top)
+
+
+
+plotchar(hist1_below, "hist1_below", "", location = location.top)
+plotchar(hist2_below, "hist2_below", "", location = location.top)
+plotchar(hist3_below, "hist3_below", "", location = location.top)
+plotchar(hist1_above, "hist1_above", "", location = location.top)
+plotchar(hist2_above, "hist2_above", "", location = location.top)
+plotchar(hist3_above, "hist3_above", "", location = location.top)
+
+
+plotchar(grow_above, "grow_above", "", location = location.top)
+plotchar(fall_above, "fall_above", "", location = location.top)
+
+
+plotchar(grow_below, "grow_below", "", location = location.top)
+plotchar(fall_below, "fall_below", "", location = location.top)
+

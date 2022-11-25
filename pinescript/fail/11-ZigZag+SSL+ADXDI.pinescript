@@ -1,0 +1,596 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("11-ZigZag+SSL+ADXDI", shorttitle="11-ZigZag+SSL+ADXDI", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000)
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+var groupADX = "Average Directional Index Settings"
+
+enableADX = input.bool(1, title = "Enable ADX?", group = groupADX) 
+timeADX = input.timeframe('5', "Timeframe", group=groupADX)
+lenADX = input(14, title="ADX Smoothing", group=groupADX)
+lenDI = input(14, title="DI Length", group=groupADX)
+lowestADX = input.float(32, title='ADX Lowest', step = 0.1, group=groupADX)
+
+dirmov(_len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, _len)
+	plus = fixnan(100 * ta.rma(plusDM, _len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, _len) / truerange)
+	[plus, minus]
+adx(lenDI, lenADX) =>
+	[plus, minus] = dirmov(lenDI)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lenADX)
+sig = request.security(syminfo.tickerid, timeADX, adx(lenDI, lenADX))
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+// @author LazyBear
+var groupVFI = "Volume Flow Indicator Settings"
+
+enableVFI = input.bool(1, title = "Enable VFI?", group = groupVFI) 
+lengthVFI = input(130, title='VFI length', group = groupVFI)
+coef = input(1, group = groupVFI)
+vcoef = input(3.4, title='Max. vol. cutoff', group = groupVFI)
+smoothVFI = input(false, group = groupVFI)
+
+VFIma(x, y) =>
+    sma_1 = ta.sma(x, y)
+    smoothVFI ? sma_1 : x
+
+typical = hlc3
+inter = math.log(typical) - math.log(typical[1])
+vinter = ta.stdev(inter, 30)
+cutoff = coef * vinter * close
+vave = ta.sma(volume, lengthVFI)[1]
+vmax = vave * vcoef
+vc = volume < vmax ? volume : vmax  //min( volume, vmax )
+mf = typical - typical[1]
+iff_1 = mf < -cutoff ? -vc : 0
+vcp = mf > cutoff ? vc : iff_1
+
+vfi = VFIma(math.sum(vcp, lengthVFI) / vave, 3)
+
+//plot(vfi, title='vfi', color=color.new(color.green, 0), linewidth=2)
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+var groupATR = "ATR Bands Settings"
+
+// Inputs
+atrPeriod = input.int(title='ATR Period', defval=14, minval=1, group = groupATR)
+srcUpper = input(title='Source Upper', defval=close, inline = "ATRSource", group = groupATR)
+srcLower = input(title='Source Lower', defval=close, inline = "ATRSource",group = groupATR)
+atrMultiplierUpper = input.float(title='ATR Multiplier Upper', defval=3, inline = "ATRMult",group = groupATR)
+atrMultiplierLower = input.float(title='ATR Multiplier Lower', defval=3, inline = "ATRMult",group = groupATR)
+
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Plotting
+//plot(srcUpper + atr * atrMultiplierUpper, color=color.new(color.green, 0))
+//plot(srcLower - atr * atrMultiplierLower, color=color.new(color.red, 0))
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+// # ========================================================================= #
+// #                   |   Momentum-based ZigZag (incl. QQE)   |
+// # ========================================================================= #
+
+var int momentum_direction = 0
+color_zigzag_lines = input(true, title='Color ZigZag lines to show force direction')
+momentum_select = input.string(title='Select Momentum Indicator:', defval='QQE', options=['MACD', 'MovingAverage', 'QQE'])
+
+
+// ZigZag function {
+zigzag(_momentum_direction) =>
+    zz_goingup = _momentum_direction == 1
+    zz_goingdown = _momentum_direction == -1
+    var float zz_peak = na
+    var float zz_bottom = na
+    zz_peak := high > zz_peak[1] and zz_goingup or zz_goingdown[1] and zz_goingup ? high : nz(zz_peak[1])
+    zz_bottom := low < zz_bottom[1] and zz_goingdown or zz_goingup[1] and zz_goingdown ? low : nz(zz_bottom[1])
+    zigzag = zz_goingup and zz_goingdown[1] ? zz_bottom[1] : zz_goingup[1] and zz_goingdown ? zz_peak[1] : na
+    zigzag
+// } End of ZigZag function
+
+// MACD  {
+fast_length = input.int(title='Fast Length', defval=12, group='if MACD Selected', inline='macd')
+slow_length = input.int(title='Slow Length', defval=26, group='if MACD Selected', inline='macd')
+src = input.source(title='Source', defval=close, group='if MACD Selected', inline='macd')
+signal_length = input.int(title='Signal Smoothing', minval=1, maxval=50, defval=9, group='if MACD Selected', inline='macd')
+sma_source = input.string(title='Oscillator MA Type', defval='EMA', options=['SMA', 'EMA'], group='if MACD Selected', inline='macd')
+sma_signal = input.string(title='Signal Line MA Type', defval='EMA', options=['SMA', 'EMA'], group='if MACD Selected', inline='macd')
+
+fast_ma = sma_source == 'SMA' ? ta.sma(src, fast_length) : ta.ema(src, fast_length)
+slow_ma = sma_source == 'SMA' ? ta.sma(src, slow_length) : ta.ema(src, slow_length)
+macd = fast_ma - slow_ma
+signal = sma_signal == 'SMA' ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+
+macdUP = ta.crossover(macd, signal)
+macdDOWN = ta.crossunder(macd, signal)
+// } End of MACD
+
+// Moving Averages {
+smoothing_type = input.string(title='Average type', defval='SMA', options=['EMA', 'SMA', 'WMA', 'VWMA', 'HMA', 'RMA', 'DEMA'], inline='movingaverage', group='if Moving Average selected')
+ma_length = input.int(20, title='Length', inline='movingaverage', group='if Moving Average selected')
+moving_average(_series, _length, _smoothing) =>
+    _smoothing == 'EMA' ? ta.ema(_series, _length) : _smoothing == 'SMA' ? ta.sma(_series, _length) : _smoothing == 'WMA' ? ta.wma(_series, _length) : _smoothing == 'VWMA' ? ta.vwma(_series, _length) : _smoothing == 'HMA' ? ta.hma(_series, _length) : _smoothing == 'RMA' ? ta.rma(_series, _length) : _smoothing == 'DEMA' ? 2 * ta.ema(_series, _length) - ta.ema(ta.ema(_series, _length), _length) : ta.ema(_series, _length)
+movingaverage = moving_average(close, ma_length, smoothing_type)
+maUP = movingaverage > movingaverage[1] and movingaverage[2] > movingaverage[1]
+maDOWN = movingaverage < movingaverage[1] and movingaverage[2] < movingaverage[1]
+// } End of Moving Averages
+
+
+// QQE {
+RSI_Period = input.int(14, title='RSI Length', inline='qqe', group='if QQE selected')
+qqeslow = input.float(4.238, title='QQE Factor', inline='qqe', group='if QQE selected')
+SFslow = input.int(5, title='RSI Smoothing', inline='qqe', group='if QQE selected')
+ThreshHold = input.int(10, title='Thresh-hold', inline='qqe', group='if QQE selected')
+rsi_currenttf = ta.rsi(close, RSI_Period)
+
+qqenew(_qqefactor, _smoothingfactor, _rsi, _threshold, _RSI_Period) =>
+    RSI_Period = _RSI_Period
+    SF = _smoothingfactor
+    QQE = _qqefactor
+    ThreshHold = _threshold
+    Wilders_Period = RSI_Period * 2 - 1
+    Rsi = _rsi
+    RsiMa = ta.ema(Rsi, SF)
+    AtrRsi = math.abs(RsiMa[1] - RsiMa)
+    MaAtrRsi = ta.ema(AtrRsi, Wilders_Period)
+    dar = ta.ema(MaAtrRsi, Wilders_Period) * QQE
+    longband = 0.0
+    shortband = 0.0
+    trend = 0
+    DeltaFastAtrRsi = dar
+    RSIndex = RsiMa
+    newshortband = RSIndex + DeltaFastAtrRsi
+    newlongband = RSIndex - DeltaFastAtrRsi
+    longband := RSIndex[1] > longband[1] and RSIndex > longband[1] ? math.max(longband[1], newlongband) : newlongband
+    shortband := RSIndex[1] < shortband[1] and RSIndex < shortband[1] ? math.min(shortband[1], newshortband) : newshortband
+    QQExlong = 0
+    QQExlong := nz(QQExlong[1])
+    QQExshort = 0
+    QQExshort := nz(QQExshort[1])
+    qqe_goingup = ta.barssince(QQExlong == 1) < ta.barssince(QQExshort == 1)
+    qqe_goingdown = ta.barssince(QQExlong == 1) > ta.barssince(QQExshort == 1)
+    var float last_qqe_high = high
+    var float last_qqe_low = low
+    last_qqe_high := high > last_qqe_high[1] and qqe_goingup or qqe_goingdown[1] and qqe_goingup ? high : nz(last_qqe_high[1])
+    last_qqe_low := low < last_qqe_low[1] and qqe_goingdown or qqe_goingup[1] and qqe_goingdown ? low : nz(last_qqe_low[1])
+    trend := ta.crossover(RSIndex, shortband[1]) or ta.crossover(high, last_qqe_high) ? 1 : ta.crossunder(RSIndex, longband[1]) or ta.crossunder(low, last_qqe_low) ? -1 : nz(trend[1], 1)
+    FastAtrRsiTL = trend == 1 ? longband : shortband
+    // Find all the QQE Crosses
+    QQExlong := trend == 1 and trend[1] == -1 ? QQExlong + 1 : 0
+    QQExshort := trend == -1 and trend[1] == 1 ? QQExshort + 1 : 0
+    qqeLong = QQExlong == 1 ? FastAtrRsiTL[1] - 50 : na
+    qqeShort = QQExshort == 1 ? FastAtrRsiTL[1] - 50 : na
+    qqenew = qqeLong ? 1 : qqeShort ? -1 : na
+    qqenew
+
+qqeUP = qqenew(qqeslow, SFslow, rsi_currenttf, ThreshHold, RSI_Period) == 1
+qqeDOWN = qqenew(qqeslow, SFslow, rsi_currenttf, ThreshHold, RSI_Period) == -1
+// } End of QQE
+
+
+momentumUP = momentum_select == 'MACD' ? macdUP : momentum_select == 'MovingAverage' ? maUP : momentum_select == 'QQE' ? qqeUP : qqeUP
+
+momentumDOWN = momentum_select == 'MACD' ? macdDOWN : momentum_select == 'MovingAverage' ? maDOWN : momentum_select == 'QQE' ? qqeDOWN : qqeDOWN
+
+momentum_direction := momentumUP ? 1 : momentumDOWN ? -1 : nz(momentum_direction[1])
+
+// { Force detection
+rsi5 = ta.rsi(close, 5)
+ob = 80
+os = 20
+barssince_momentumUP = ta.barssince(momentumUP)
+barssince_momentumDOWN = ta.barssince(momentumDOWN)
+momentum_DOWN_was_force_up = momentumDOWN and (barssince_momentumUP >= ta.barssince(rsi5 > ob))[1]
+momentum_UP_was_force_down = momentumUP and (barssince_momentumDOWN >= ta.barssince(rsi5 < os))[1]
+zzcolor_rsi5 = momentum_DOWN_was_force_up ? color.lime : momentum_UP_was_force_down ? color.red : color.black
+// } End of Force detection
+
+
+ZigZag = zigzag(momentum_direction)
+//plot(ZigZag, linewidth=5, color=color_zigzag_lines ? zzcolor_rsi5 : color.black, title='ZIGZAG', style=plot.style_line, transp=0)
+
+buyZigZag = momentumUP and not momentum_UP_was_force_down
+sellZigZag = momentumDOWN and not momentum_DOWN_was_force_up
+
+//if GoShort
+    //label.new(bar_index, ZigZag, style=label.style_label_down, color=color.red, text=str.tostring('SHORT\n\npivot high: \n' + str.tostring(ZigZag)))
+//if GoLong
+    //label.new(bar_index, ZigZag, style=label.style_label_up, color=color.lime, text=str.tostring('LONG\n\npivot low: \n' + str.tostring(ZigZag)))
+
+
+// # ========================================================================= #
+// #                   |   Momentum-based ZigZag (incl. QQE)   |
+// # ========================================================================= #
+
+//By Mihkel00
+// # ========================================================================= #
+// #                   |   SSL Hybrid by Mihkel00   |
+// # ========================================================================= #
+
+//ATR
+atrlen = input(14, 'ATR Period')
+mult = input.float(1, 'ATR Multi', step=0.1)
+smoothing = input.string(title='ATR Smoothing', defval='WMA', options=['RMA', 'SMA', 'EMA', 'WMA'])
+
+ma_function(source, atrlen) =>
+    if smoothing == 'RMA'
+        ta.rma(source, atrlen)
+    else
+        if smoothing == 'SMA'
+            ta.sma(source, atrlen)
+        else
+            if smoothing == 'EMA'
+                ta.ema(source, atrlen)
+            else
+                ta.wma(source, atrlen)
+atr_slen = ma_function(ta.tr(true), atrlen)
+////ATR Up/Low Bands
+upper_band = atr_slen * mult + close
+lower_band = close - atr_slen * mult
+
+////BASELINE / SSL1 / SSL2 / EXIT MOVING AVERAGE VALUES
+maType = input.string(title='SSL1 / Baseline Type', defval='HMA', options=['SMA', 'EMA', 'DEMA', 'TEMA', 'LSMA', 'WMA', 'MF', 'VAMA', 'TMA', 'HMA', 'JMA', 'Kijun v2', 'EDSMA', 'McGinley'])
+len = input(title='SSL1 / Baseline Length', defval=200)
+
+SSL2Type = input.string(title='SSL2 / Continuation Type', defval='JMA', options=['SMA', 'EMA', 'DEMA', 'TEMA', 'WMA', 'MF', 'VAMA', 'TMA', 'HMA', 'JMA', 'McGinley'])
+len2 = input(title='SSL 2 Length', defval=5)
+//
+SSL3Type = input.string(title='EXIT Type', defval='HMA', options=['DEMA', 'TEMA', 'LSMA', 'VAMA', 'TMA', 'HMA', 'JMA', 'Kijun v2', 'McGinley', 'MF'])
+len3 = input(title='EXIT Length', defval=15)
+SSLsrc = input(title='Source', defval=close)
+
+//
+tema(SSLsrc, len) =>
+    ema1 = ta.ema(SSLsrc, len)
+    ema2 = ta.ema(ema1, len)
+    ema3 = ta.ema(ema2, len)
+    3 * ema1 - 3 * ema2 + ema3
+kidiv = input.int(defval=1, maxval=4, title='Kijun MOD Divider')
+
+jurik_phase = input(title='* Jurik (JMA) Only - Phase', defval=3)
+jurik_power = input(title='* Jurik (JMA) Only - Power', defval=1)
+volatility_lookback = input(10, title='* Volatility Adjusted (VAMA) Only - Volatility lookback length')
+//MF
+beta = input.float(0.8, minval=0, maxval=1, step=0.1, title='Modular Filter, General Filter Only - Beta')
+feedback = input(false, title='Modular Filter Only - Feedback')
+z = input.float(0.5, title='Modular Filter Only - Feedback Weighting', step=0.1, minval=0, maxval=1)
+//EDSMA
+ssfLength = input.int(title='EDSMA - Super Smoother Filter Length', minval=1, defval=20)
+ssfPoles = input.int(title='EDSMA - Super Smoother Filter Poles', defval=2, options=[2, 3])
+
+//----
+
+//EDSMA
+get2PoleSSF(SSLsrc, length) =>
+    PI = 2 * math.asin(1)
+    arg = math.sqrt(2) * PI / length
+    a1 = math.exp(-arg)
+    b1 = 2 * a1 * math.cos(arg)
+    c2 = b1
+    c3 = -math.pow(a1, 2)
+    c1 = 1 - c2 - c3
+
+    ssf = 0.0
+    ssf := c1 * SSLsrc + c2 * nz(ssf[1]) + c3 * nz(ssf[2])
+    ssf
+
+get3PoleSSF(SSLsrc, length) =>
+    PI = 2 * math.asin(1)
+
+    arg = PI / length
+    a1 = math.exp(-arg)
+    b1 = 2 * a1 * math.cos(1.738 * arg)
+    c1 = math.pow(a1, 2)
+
+    coef2 = b1 + c1
+    coef3 = -(c1 + b1 * c1)
+    coef4 = math.pow(c1, 2)
+    coef1 = 1 - coef2 - coef3 - coef4
+
+    ssf = 0.0
+    ssf := coef1 * SSLsrc + coef2 * nz(ssf[1]) + coef3 * nz(ssf[2]) + coef4 * nz(ssf[3])
+    ssf
+
+ma(type, SSLsrc, len) =>
+    float result = 0
+    if type == 'TMA'
+        result := ta.sma(ta.sma(SSLsrc, math.ceil(len / 2)), math.floor(len / 2) + 1)
+        result
+    if type == 'MF'
+        ts = 0.
+        b = 0.
+        c = 0.
+        os = 0.
+        //----
+        alpha = 2 / (len + 1)
+        a = feedback ? z * SSLsrc + (1 - z) * nz(ts[1], SSLsrc) : SSLsrc
+        //----
+        b := a > alpha * a + (1 - alpha) * nz(b[1], a) ? a : alpha * a + (1 - alpha) * nz(b[1], a)
+        c := a < alpha * a + (1 - alpha) * nz(c[1], a) ? a : alpha * a + (1 - alpha) * nz(c[1], a)
+        os := a == b ? 1 : a == c ? 0 : os[1]
+        //----
+        upper = beta * b + (1 - beta) * c
+        lower = beta * c + (1 - beta) * b
+        ts := os * upper + (1 - os) * lower
+        result := ts
+        result
+    if type == 'LSMA'
+        result := ta.linreg(SSLsrc, len, 0)
+        result
+    if type == 'SMA'  // Simple
+        result := ta.sma(SSLsrc, len)
+        result
+    if type == 'EMA'  // Exponential
+        result := ta.ema(SSLsrc, len)
+        result
+    if type == 'DEMA'  // Double Exponential
+        e = ta.ema(SSLsrc, len)
+        result := 2 * e - ta.ema(e, len)
+        result
+    if type == 'TEMA'  // Triple Exponential
+        e = ta.ema(SSLsrc, len)
+        result := 3 * (e - ta.ema(e, len)) + ta.ema(ta.ema(e, len), len)
+        result
+    if type == 'WMA'  // Weighted
+        result := ta.wma(SSLsrc, len)
+        result
+    if type == 'VAMA'  // Volatility Adjusted
+        /// Copyright © 2019 to present, Joris Duyck (JD)
+        mid = ta.ema(SSLsrc, len)
+        dev = SSLsrc - mid
+        vol_up = ta.highest(dev, volatility_lookback)
+        vol_down = ta.lowest(dev, volatility_lookback)
+        result := mid + math.avg(vol_up, vol_down)
+        result
+    if type == 'HMA'  // Hull
+        result := ta.wma(2 * ta.wma(SSLsrc, len / 2) - ta.wma(SSLsrc, len), math.round(math.sqrt(len)))
+        result
+    if type == 'JMA'  // Jurik
+        /// Copyright © 2018 Alex Orekhov (everget)
+        /// Copyright © 2017 Jurik Research and Consulting.
+        phaseRatio = jurik_phase < -100 ? 0.5 : jurik_phase > 100 ? 2.5 : jurik_phase / 100 + 1.5
+        beta = 0.45 * (len - 1) / (0.45 * (len - 1) + 2)
+        alpha = math.pow(beta, jurik_power)
+        jma = 0.0
+        e0 = 0.0
+        e0 := (1 - alpha) * SSLsrc + alpha * nz(e0[1])
+        e1 = 0.0
+        e1 := (SSLsrc - e0) * (1 - beta) + beta * nz(e1[1])
+        e2 = 0.0
+        e2 := (e0 + phaseRatio * e1 - nz(jma[1])) * math.pow(1 - alpha, 2) + math.pow(alpha, 2) * nz(e2[1])
+        jma := e2 + nz(jma[1])
+        result := jma
+        result
+    if type == 'Kijun v2'
+        kijun = math.avg(ta.lowest(len), ta.highest(len))  //, (open + close)/2)
+        conversionLine = math.avg(ta.lowest(len / kidiv), ta.highest(len / kidiv))
+        delta = (kijun + conversionLine) / 2
+        result := delta
+        result
+    if type == 'McGinley'
+        mg = 0.0
+        mg := na(mg[1]) ? ta.ema(SSLsrc, len) : mg[1] + (SSLsrc - mg[1]) / (len * math.pow(SSLsrc / mg[1], 4))
+        result := mg
+        result
+    if type == 'EDSMA'
+
+        zeros = SSLsrc - nz(SSLsrc[2])
+        avgZeros = (zeros + zeros[1]) / 2
+
+        // Ehlers Super Smoother Filter 
+        ssf = ssfPoles == 2 ? get2PoleSSF(avgZeros, ssfLength) : get3PoleSSF(avgZeros, ssfLength)
+
+        // Rescale filter in terms of Standard Deviations
+        stdev = ta.stdev(ssf, len)
+        scaledFilter = stdev != 0 ? ssf / stdev : 0
+
+        alpha = 5 * math.abs(scaledFilter) / len
+
+        edsma = 0.0
+        edsma := alpha * SSLsrc + (1 - alpha) * nz(edsma[1])
+        result := edsma
+        result
+    result
+
+
+useTrueRange = input(true)
+multy = input.float(0.2, step=0.05, title='Base Channel Multiplier')
+Keltma = ma(maType, SSLsrc, len)
+range_1 = useTrueRange ? ta.tr : high - low
+rangema = ta.ema(range_1, len)
+upperk = Keltma + rangema * multy
+lowerk = Keltma - rangema * multy
+
+buySSL = close > upperk
+sellSSL = close < lowerk
+
+// # ========================================================================= #
+// #                   |   SSL Hybrid by Mihkel00   |
+// # ========================================================================= #
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+ADXDIlen = input(14)
+th = input(20)
+
+TrueRange = math.max(math.max(high - low, math.abs(high - nz(close[1]))), math.abs(low - nz(close[1])))
+DirectionalMovementPlus = high - nz(high[1]) > nz(low[1]) - low ? math.max(high - nz(high[1]), 0) : 0
+DirectionalMovementMinus = nz(low[1]) - low > high - nz(high[1]) ? math.max(nz(low[1]) - low, 0) : 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - nz(SmoothedTrueRange[1]) / ADXDIlen + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - nz(SmoothedDirectionalMovementPlus[1]) / ADXDIlen + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - nz(SmoothedDirectionalMovementMinus[1]) / ADXDIlen + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+DX = math.abs(DIPlus - DIMinus) / (DIPlus + DIMinus) * 100
+ADX = ta.sma(DX, ADXDIlen)
+
+buyADXDI = DIMinus < 20 and DIPlus > 20 and ADX > 20
+sellADXDI = DIPlus < 20 and DIMinus > 20 and ADX >20
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+
+var entryPrice = 0.0
+var priceLimit = 0.0
+var priceStop = 0.0
+var tradeDay = false
+var groupBackTest ="Back Test Settings"
+
+fromYear = input.int(defval=2000, title='From Year', minval=2000, inline = "BTFrom", group=groupBackTest)
+fromMomth = input.int(defval=1, title='From Month', minval=1, maxval=12, inline = "BTFrom", group=groupBackTest)
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, inline = "BTFrom", group=groupBackTest)
+toYear = input.int(defval=2300, title='To Year', minval=2020, inline = "BTTo", group=groupBackTest)
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, inline = "BTTo", group=groupBackTest)
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, inline = "BTTo", group=groupBackTest)
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+var groupTrade = "Trade Settings"
+
+buySLMeth = input.session(defval = "%", title = "Buy Stop Loss Method", options = ["%", "ATR", "tick"], inline = "BuySL", group = groupTrade) 
+sellSLMeth = input.session(defval = "%", title = "Sell Stop Loss Method", options = ["%", "ATR", "tick"], inline = "SellSL", group = groupTrade)
+buyTPMeth = input.session(defval = "%", title = "Buy Take Profit Method", options = ["%", "ATR", "tick", "R/R"], inline = "BuyTP", group = groupTrade) 
+sellTPMeth = input.session(defval = "%", title = "Sell Take Profit Method", options = ["%", "ATR", "tick", "R/R"], inline = "SellTP", group = groupTrade)
+
+buySLPer = input.float(defval = 1 , title = "Buy Stop Loss %", minval = 0 , step = 0.01 , inline = "BuySL", group = groupTrade)
+sellSLPer = input.float(defval = 1 , title = "Sell Stop Loss %", minval = 0 , step = 0.01 , inline = "SellSL", group = groupTrade)
+buyTPPer = input.float(defval = 1 , title = "Buy Take Progit %", minval = 0 , step = 0.01 , inline = "BuyTP", group = groupTrade)
+sellTPPer = input.float(defval = 1 , title = "Sell Take Progit %", minval = 0 , step = 0.01 , inline = "SellTP", group = groupTrade)
+
+ratioRR = input.float(1, title='R/R Ratio', step = 0.1, group=groupTrade)
+
+leverage = input.float(10, title='Leverage', step = 0.1, group=groupTrade)
+
+dd1 = input.bool(0, title='Sun',inline = "tradeDay", group=groupTrade)
+dd2 = input.bool(0, title='Mon', inline = "tradeDay", group=groupTrade)
+dd3 = input.bool(0, title='Tues', inline = "tradeDay", group=groupTrade)
+dd4 = input.bool(0, title='Wed', inline = "tradeDay", group=groupTrade)
+dd5 = input.bool(0, title='Thur', inline = "tradeDay", group=groupTrade)
+dd6 = input.bool(0, title='Fri', inline = "tradeDay", group=groupTrade)
+dd7 = input.bool(0, title='Sat', inline = "tradeDay", group=groupTrade)
+
+dayweek = dayofweek(time = time, timezone = 'America/New_York' )
+
+tradeDay := switch dayweek
+    1 => dd1
+    2 => dd2
+    3 => dd3
+    4 => dd4
+    5 => dd5
+    6 => dd6
+    7 => dd7
+    => false
+
+
+
+passADX = enableADX ? sig > lowestADX : true
+
+buyVFI = enableVFI ? vfi > 0 : true
+sellVFI = enableVFI ? vfi < 0 : true
+
+buyfilters = passADX and buyVFI and tradeDay
+sellfilters = passADX and sellVFI and tradeDay
+
+// you can set your own logic here
+
+buyCondition = buyfilters and strategy.position_size == 0 and buyZigZag and buySSL and buyADXDI
+sellCondition = sellfilters and strategy.position_size == 0 and sellZigZag and sellSSL and sellADXDI
+
+if (strategy.position_size != 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+else
+    entryPrice := 0.0
+    priceLimit := 0.0
+    priceStop := 0.0
+// you can set your own logic here
+if(window())
+    if (buyCondition)
+        priceStop := switch buySLMeth
+            "%" => close * (1 - buySLPer / 100)
+            "ATR" => srcLower - atr * atrMultiplierLower
+            "tick" => close - (syminfo.mintick * buySLPer)
+        
+        priceLimit := switch buyTPMeth
+            "%" => close * (1 + buyTPPer / 100)
+            "ATR" => srcUpper + atr * atrMultiplierUpper
+            "tick" => close + (syminfo.mintick * buyTPPer)
+            "R/R" => close + (close - priceStop) * ratioRR 
+
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        strategy.exit("Buy", limit=priceLimit, stop=priceStop, alert_message="close", comment_profit="Buy_profit", comment_loss="Buy_loss")
+    if (sellCondition)
+        priceStop := switch sellSLMeth
+            "%" => close * (1 + sellSLPer / 100)
+            "ATR" => srcUpper + atr * atrMultiplierUpper
+            "tick" => close + (syminfo.mintick * sellSLPer)
+
+        priceLimit := switch sellTPMeth
+            "%" => close * (1 - sellTPPer / 100)
+            "ATR" => srcLower - atr * atrMultiplierLower
+            "tick" => close - (syminfo.mintick * sellTPPer)
+            "R/R" => close - (priceStop - close) * ratioRR
+
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        strategy.exit("Sell",limit=priceLimit, stop=priceStop, alert_message="close", comment_profit="Sell_profit", comment_loss="Sell_loss")
+        
+
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(priceLimit, "priceLimit", "", location = location.top)
+plotchar(priceStop, "priceStop", "", location = location.top)
+
+
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)
+
+
+plotchar(passADX, "passADX", "", location = location.top)
+plotchar(buyVFI, "buyVFI", "", location = location.top)
+plotchar(sellVFI, "sellVFI", "", location = location.top)
+plotchar(buyfilters, "buyfilters", "", location = location.top)
+plotchar(sellfilters, "sellfilters", "", location = location.top)
+plotchar(tradeDay, "tradeDay", "", location = location.top)
+plotchar(dayofweek(time = time, timezone = 'America/New_York' ) , "dayofweek(time = dayofweek, timezone = 'America/New_York' ) ", "", location = location.top)
+plotchar(syminfo.mintick, "mintick", "", location = location.top)
+plotchar(buyADXDI, "buyADXDI", "", location = location.top)
+plotchar(sellADXDI, "sellADXDI", "", location = location.top)

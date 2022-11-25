@@ -1,0 +1,11 @@
+{
+  "passphrase": "*******************",
+  "total_order":2,
+
+  "ticker": "{{ticker}}",
+  "side": "{{strategy.order.alert_message}}",
+  "order_price": {{close}},
+  "limit_price": "{{plot_1}}",
+  "stop_price": "{{plot_2}}"
+
+}

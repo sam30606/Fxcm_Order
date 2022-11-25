@@ -1,0 +1,39 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("traiolinstop", shorttitle="traiolinstop", overlay=true)
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+if close > ta.sma(close,50)
+    strategy.entry("long",strategy.long)
+    
+
+
+trailperc=0.05
+price_stop=0.0
+stopValue=0.0
+
+
+if strategy.position_size > 0
+    stopValue := close * (1-trailperc)
+    price_stop := math.max(stopValue,price_stop[1])
+else
+    price_stop := 0
+
+if strategy.position_size > 0
+    strategy.exit("stoploss", "long", limit=limitValue, stop=price_stop)
+
+
+plotchar(limitValue, "limitValue", "", location = location.top)
+plotchar(stopValue, "stopValue", "", location = location.top)
+plotchar(price_stop, "price_stop", "", location = location.top)
+
+    

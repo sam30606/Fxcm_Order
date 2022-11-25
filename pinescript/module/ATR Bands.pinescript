@@ -1,0 +1,24 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+var groupATR = "ATR Bands Settings"
+
+// Inputs
+atrPeriod = input.int(title='ATR Period', defval=14, minval=1, group = groupATR)
+srcUpper = input(title='Source Upper', defval=close, inline = "ATRSource", group = groupATR)
+srcLower = input(title='Source Lower', defval=close, inline = "ATRSource",group = groupATR)
+atrMultiplierUpper = input(title='ATR Multiplier Upper', defval=1, inline = "ATRMult",group = groupATR)
+atrMultiplierLower = input(title='ATR Multiplier Lower', defval=1, inline = "ATRMult",group = groupATR)
+
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Plotting
+//plot(srcUpper + atr * atrMultiplierUpper, color=color.new(color.green, 0))
+//plot(srcLower - atr * atrMultiplierLower, color=color.new(color.red, 0))
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #

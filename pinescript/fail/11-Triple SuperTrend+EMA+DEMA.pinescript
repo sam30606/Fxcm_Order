@@ -1,0 +1,347 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("11-Triple SuperTrend+EMA+DEMA", shorttitle="11-Triple SuperTrend+EMA+DEMA", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000,commission_value=0.036 )
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+var groupADX = "Average Directional Index Settings"
+
+enableADX = input.bool(1, title = "Enable ADX?", group = groupADX) 
+timeADX = input.timeframe('5', "Timeframe", group=groupADX)
+lenADX = input(14, title="ADX Smoothing", group=groupADX)
+lenDI = input(14, title="DI Length", group=groupADX)
+lowestADX = input.float(34, title='ADX Lowest', step = 0.1, group=groupADX)
+
+dirmov(_len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, _len)
+	plus = fixnan(100 * ta.rma(plusDM, _len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, _len) / truerange)
+	[plus, minus]
+adx(lenDI, lenADX) =>
+	[plus, minus] = dirmov(lenDI)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lenADX)
+sig = request.security(syminfo.tickerid, timeADX, adx(lenDI, lenADX))
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+// @author LazyBear
+var groupVFI = "Volume Flow Indicator Settings"
+
+enableVFI = input.bool(1, title = "Enable VFI?", group = groupVFI) 
+lengthVFI = input(160, title='VFI length', group = groupVFI)
+coef = input.float(4, group = groupVFI)
+vcoef = input.float(3.4, title='Max. vol. cutoff', group = groupVFI)
+smoothVFI = input(false, group = groupVFI)
+
+ma(x, y) =>
+    sma_1 = ta.sma(x, y)
+    smoothVFI ? sma_1 : x
+
+typical = hlc3
+inter = math.log(typical) - math.log(typical[1])
+vinter = ta.stdev(inter, 30)
+cutoff = coef * vinter * close
+vave = ta.sma(volume, lengthVFI)[1]
+vmax = vave * vcoef
+vc = volume < vmax ? volume : vmax  //min( volume, vmax )
+mf = typical - typical[1]
+iff_1 = mf < -cutoff ? -vc : 0
+vcp = mf > cutoff ? vc : iff_1
+
+vfi = ma(math.sum(vcp, lengthVFI) / vave, 3)
+
+//plot(vfi, title='vfi', color=color.new(color.green, 0), linewidth=2)
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+var groupATR = "ATR Bands Settings"
+
+// Inputs
+atrPeriod = input.int(title='ATR Period', defval=14, minval=1, group = groupATR)
+srcUpper = input(title='Source Upper', defval=close, inline = "ATRSource", group = groupATR)
+srcLower = input(title='Source Lower', defval=close, inline = "ATRSource",group = groupATR)
+atrMultiplierUpper = input.float(title='ATR Multiplier Upper', defval=4, inline = "ATRMult",group = groupATR)
+atrMultiplierLower = input.float(title='ATR Multiplier Lower', defval=4, inline = "ATRMult",group = groupATR)
+
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Plotting
+//plot(srcUpper + atr * atrMultiplierUpper, color=color.new(color.green, 0))
+//plot(srcLower - atr * atrMultiplierLower, color=color.new(color.red, 0))
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+
+rsiLengthInput = input.int(14, minval=1, title="RSI Length", group="RSI Settings")
+rsiSourceInput = input.source(close, "Source", group="RSI Settings")
+rsiOverbuy = input.int(80, minval=1, title="RSI Overbuy", group="RSI Settings")
+rsiOversell = input.int(10, minval=1, title="RSI Oversell", group="RSI Settings")
+
+
+rsiUp = ta.rma(math.max(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsiDown = ta.rma(-math.min(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsi = rsiDown == 0 ? 100 : rsiUp == 0 ? 0 : 100 - (100 / (1 + rsiUp / rsiDown))
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen = input.int(200, minval=1, title="Length", group="EMA Settings")
+emaSrc = input(close, title="Source", group="EMA Settings")
+offset = input.int(title="Offset", defval=0, minval=-500, maxval=500, group="EMA Settings")
+emaOut = ta.ema(emaSrc, emaLen)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Supertrend  |
+// # ========================================================================= #
+
+atrPeriod_1 = input(12, "ATR Length", group="Supertrend Settings-1")
+factor_1 = input.float(3.0, "Factor", step = 0.01, group="Supertrend Settings-1")
+
+atrPeriod_2 = input(10, "ATR Length", group="Supertrend Settings-2")
+factor_2 = input.float(1, "Factor", step = 0.01, group="Supertrend Settings-2")
+
+atrPeriod_3 = input(11, "ATR Length", group="Supertrend Settings-3")
+factor_3 = input.float(2, "Factor", step = 0.01, group="Supertrend Settings-3")
+
+[supertrend_1, direction_1] = ta.supertrend(factor_1, atrPeriod_1)
+upTrend_1 = direction_1 < 0 ? true : na
+downTrend_1 = direction_1 < 0? na : true
+
+[supertrend_2, direction_2] = ta.supertrend(factor_2, atrPeriod_2)
+upTrend_2 = direction_2 < 0 ? true : na
+downTrend_2 = direction_2 < 0? na : true
+
+[supertrend_3, direction_3] = ta.supertrend(factor_3, atrPeriod_3)
+upTrend_3 = direction_3 < 0 ? true : na
+downTrend_3 = direction_3 < 0? na : true
+
+
+// # ========================================================================= #
+// #                   |   Supertrend  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Double EMA  |
+// # ========================================================================= #
+
+var groupDEMA = "DEMA Settings"
+
+demaLength_1 = input.int(144, minval=1,title="1-DEMA Length", group=groupDEMA)
+demaSrc_1 = input(close, title="1-DEMA Source", group=groupDEMA)
+demaLength_2 = input.int(169, minval=1,title="2-DEMA Length", group=groupDEMA)
+demaSrc_2 = input(close, title="2-DEMA Source", group=groupDEMA)
+
+dema(_src, _len) =>
+    e1 = ta.ema(_src, _len)
+    e2 = ta.ema(e1, _len)
+    dema = 2 * e1 - e2
+
+//plot(dema, "DEMA", color=#43A047)
+
+// # ========================================================================= #
+// #                   |   Double EMA  |
+// # ========================================================================= #
+
+var entryPrice = 0.0
+var priceLimit = 0.0
+var priceStop = 0.0
+var tradeDay = false
+var groupBackTest ="Back Test Settings"
+
+fromYear = input.int(defval=2022, title='From Year', minval=2020, inline = "BTFrom", group=groupBackTest)
+fromMomth = input.int(defval=1, title='From Month', minval=1, maxval=12, inline = "BTFrom", group=groupBackTest)
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, inline = "BTFrom", group=groupBackTest)
+toYear = input.int(defval=2300, title='To Year', minval=2020, inline = "BTTo", group=groupBackTest)
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, inline = "BTTo", group=groupBackTest)
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, inline = "BTTo", group=groupBackTest)
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+var groupTrade = "Trade Settings"
+
+buySLMeth = input.session(defval = "%", title = "Buy Stop Loss Method", options = ["%", " ATR"], inline = "BuySL", group = groupTrade) 
+sellSLMeth = input.session(defval = "%", title = "Sell Stop Loss Method", options = ["%", " ATR"], inline = "SellSL", group = groupTrade)
+buyTPMeth = input.session(defval = "%", title = "Buy Take Profit Method", options = ["%", " ATR", "R/R"], inline = "BuyTP", group = groupTrade) 
+sellTPMeth = input.session(defval = "%", title = "Sell Take Profit Method", options = ["%", " ATR", "R/R"], inline = "SellTP", group = groupTrade)
+
+buySLPer = input.float(defval = 1 , title = "Buy Stop Loss %", minval = 0 , maxval = 100 , step = 0.01 , inline = "BuySL", group = groupTrade)/100
+sellSLPer = input.float(defval = 1 , title = "Sell Stop Loss %", minval = 0 , maxval = 100 , step = 0.01 , inline = "SellSL", group = groupTrade)/100
+buyTPPer = input.float(defval = 1 , title = "Buy Take Progit %", minval = 0 , maxval = 100 , step = 0.01 , inline = "BuyTP", group = groupTrade)/100
+sellTPPer = input.float(defval = 1 , title = "Sell Take Progit %", minval = 0 , maxval = 100 , step = 0.01 , inline = "SellTP", group = groupTrade)/100
+
+ratioRR = input.float(1, title='R/R Ratio', step = 0.1, group=groupTrade)
+
+leverage = input.float(10, title='Leverage', step = 0.1, group=groupTrade)
+
+dd1 = input.bool(0, title='Sun',inline = "tradeDay", group=groupTrade)
+dd2 = input.bool(0, title='Mon', inline = "tradeDay", group=groupTrade)
+dd3 = input.bool(0, title='Tues', inline = "tradeDay", group=groupTrade)
+dd4 = input.bool(0, title='Wed', inline = "tradeDay", group=groupTrade)
+dd5 = input.bool(0, title='Thur', inline = "tradeDay", group=groupTrade)
+dd6 = input.bool(0, title='Fri', inline = "tradeDay", group=groupTrade)
+dd7 = input.bool(0, title='Sat', inline = "tradeDay", group=groupTrade)
+
+tradeDay := switch dayofweek
+    1 => dd1
+    2 => dd2
+    3 => dd3
+    4 => dd4
+    5 => dd5
+    6 => dd6
+    7 => dd7
+    => false
+
+
+
+passADX = enableADX ? sig > lowestADX : true
+
+buyVFI = enableVFI ? vfi > 4 and vfi > math.avg(vfi[1], vfi[2], vfi[3]): true
+sellVFI = enableVFI ? vfi < -4 and vfi < math.avg(vfi[1], vfi[2], vfi[3]) : true
+
+buyRSI = rsi > 51 and rsi < rsiOverbuy
+sellRSI = rsi < 49 and rsi > rsiOversell
+
+buyfilters = passADX and buyVFI and tradeDay 
+sellfilters = passADX and sellVFI and tradeDay 
+// you can set your own logic here
+buyEMA = close > emaOut
+sellEMA = close < emaOut
+
+buyST = upTrend_1 and upTrend_2 and upTrend_3 
+sellST = downTrend_1 and downTrend_2 and downTrend_3 
+
+buyDEMA = close > dema(demaSrc_1, demaLength_1) and close > dema(demaSrc_2, demaLength_2)
+sellDEMA = close < dema(demaSrc_1, demaLength_1) and close < dema(demaSrc_2, demaLength_2)
+
+buyCondition = buyfilters and buyEMA and buyST and buyDEMA
+sellCondition = sellfilters and sellEMA and sellST and sellDEMA
+
+
+// you can set your own logic here
+if(window())
+    if (buyCondition)
+        priceStop := switch buySLMeth
+            "%" => close * (1 - buySLPer)
+            "ATR" => srcLower - atr * atrMultiplierLower
+        
+        priceLimit := switch buyTPMeth
+            "%" => close * (1 + buyTPPer)
+            "ATR" => srcUpper + atr * atrMultiplierUpper
+            "R/R" => close + (close - priceStop) * ratioRR 
+
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        strategy.exit("buyStoploss", "Buy", limit=priceLimit, stop=priceStop, alert_message="close")
+    if (sellCondition)
+        priceStop := switch sellSLMeth
+            "%" => close * (1 + sellSLPer)
+            "ATR" => srcUpper + atr * atrMultiplierUpper
+
+        priceLimit := switch sellTPMeth
+            "%" => close * (1 - sellTPPer)
+            "ATR" => srcLower - atr * atrMultiplierLower
+            "R/R" => close - (priceStop - close) * ratioRR
+
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        strategy.exit("sellStoploss", "Sell",limit=priceLimit, stop=priceStop, alert_message="close")
+        
+net_profit = strategy.netprofit + strategy.openprofit
+
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(priceLimit, "priceLimit", "", location = location.top)
+plotchar(priceStop, "priceStop", "", location = location.top)
+
+
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)
+
+
+plotchar(passADX, "passADX", "", location = location.top)
+plotchar(buyVFI, "buyVFI", "", location = location.top)
+plotchar(sellVFI, "sellVFI", "", location = location.top)
+plotchar(buyfilters, "buyfilters", "", location = location.top)
+plotchar(sellfilters, "sellfilters", "", location = location.top)
+plotchar(tradeDay, "tradeDay", "", location = location.top)
+
+
+//plotchar(array.size(_buyMACD) > 0 ? array.get(_buyMACD,0) : na , "array.get(_buyMACD,0)", "", location = location.top)
+//plotchar(array.size(_buyMACD) > 0 ? array.get(_buyMACD,1) : na , "array.get(_buyMACD,1)", "", location = location.top)
+//plotchar(array.size(_buyMACD) > 0 ? array.get(_buyMACD,2) : na , "array.get(_buyMACD,2)", "", location = location.top)
+//plotchar(array.size(_buyMACD) > 0 ? array.get(_buyMACD,3) : na , "array.get(_buyMACD,3)", "", location = location.top)
+//plotchar(array.size(_buyMACD) > 0 ? array.get(_buyMACD,4) : na , "array.get(_buyMACD,4)", "", location = location.top)
+//plotchar(array.includes(_buyMACD, true) , "_buyMACD", "", location = location.top)
+//plotchar(array.size(_buyMACD) , "size", "", location = location.top)
+
+//plotchar(array.size(_sellMACD) > 0 ? array.get(_sellMACD,0) : na , "array.get(_sellMACD,0)", "", location = location.top)
+//plotchar(array.size(_sellMACD) > 0 ? array.get(_sellMACD,1) : na , "array.get(_sellMACD,1)", "", location = location.top)
+//plotchar(array.size(_sellMACD) > 0 ? array.get(_sellMACD,2) : na , "array.get(_sellMACD,2)", "", location = location.top)
+//plotchar(array.size(_sellMACD) > 0 ? array.get(_sellMACD,3) : na , "array.get(_sellMACD,3)", "", location = location.top)
+//plotchar(array.size(_sellMACD) > 0 ? array.get(_sellMACD,4) : na , "array.get(_sellMACD,4)", "", location = location.top)
+//plotchar(array.includes(_sellMACD, true) , "_sellMACD", "", location = location.top)
+//plotchar(array.size(_sellMACD) , "size", "", location = location.top)
+
+//float[] _hist = request.security_lower_tf(syminfo.tickerid, macdTime, hist) 
+//float[] _upper = request.security_lower_tf(syminfo.tickerid, macdTime, upper) 
+//float[] _lower = request.security_lower_tf(syminfo.tickerid, macdTime, lower) 
+
+//plotchar(array.size(_hist) > 0 ? array.get(_hist,0) : na , "array.get(_hist,0)", "", location = location.top)
+//plotchar(array.size(_hist) > 0 ? array.get(_hist,1) : na , "array.get(_hist,1)", "", location = location.top)
+//plotchar(array.size(_hist) > 0 ? array.get(_hist,2) : na , "array.get(_hist,2)", "", location = location.top)
+//plotchar(array.size(_hist) > 0 ? array.get(_hist,3) : na , "array.get(_hist,3)", "", location = location.top)
+//plotchar(array.size(_hist) > 0 ? array.get(_hist,4) : na , "array.get(_hist,4)", "", location = location.top)
+
+//plotchar(array.size(_upper) > 0 ? array.get(_upper,0) : na , "array.get(_upper,0)", "", location = location.top)
+//plotchar(array.size(_upper) > 0 ? array.get(_upper,1) : na , "array.get(_upper,1)", "", location = location.top)
+//plotchar(array.size(_upper) > 0 ? array.get(_upper,2) : na , "array.get(_upper,2)", "", location = location.top)
+//plotchar(array.size(_upper) > 0 ? array.get(_upper,3) : na , "array.get(_upper,3)", "", location = location.top)
+//plotchar(array.size(_upper) > 0 ? array.get(_upper,4) : na , "array.get(_upper,4)", "", location = location.top)
+
+//plotchar(array.size(_lower) > 0 ? array.get(_lower,0) : na , "array.get(_lower,0)", "", location = location.top)
+//plotchar(array.size(_lower) > 0 ? array.get(_lower,1) : na , "array.get(_lower,1)", "", location = location.top)
+//plotchar(array.size(_lower) > 0 ? array.get(_lower,2) : na , "array.get(_lower,2)", "", location = location.top)
+//plotchar(array.size(_lower) > 0 ? array.get(_lower,3) : na , "array.get(_lower,3)", "", location = location.top)
+//plotchar(array.size(_lower) > 0 ? array.get(_lower,4) : na , "array.get(_lower,4)", "", location = location.top)

@@ -1,0 +1,328 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("9-WAE+T3+ATR Scalping", shorttitle="9-WAE+T3+ATR Scalping", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000,commission_value=0.036 )
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+var groupADX = "Average Directional Index Settings"
+
+enableADX = input.bool(1, title = "Enable ADX?", group = groupADX) 
+timeADX = input.timeframe('5', "Timeframe", group=groupADX)
+lenADX = input(14, title="ADX Smoothing", group=groupADX)
+lenDI = input(14, title="DI Length", group=groupADX)
+lowestADX = input.float(32, title='ADX Lowest', step = 0.1, group=groupADX)
+
+dirmov(_len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, _len)
+	plus = fixnan(100 * ta.rma(plusDM, _len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, _len) / truerange)
+	[plus, minus]
+adx(lenDI, lenADX) =>
+	[plus, minus] = dirmov(lenDI)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lenADX)
+sig = request.security(syminfo.tickerid, timeADX, adx(lenDI, lenADX))
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+// @author LazyBear
+var groupVFI = "Volume Flow Indicator Settings"
+
+enableVFI = input.bool(1, title = "Enable VFI?", group = groupVFI) 
+lengthVFI = input(130, title='VFI length', group = groupVFI)
+coef = input(1, group = groupVFI)
+vcoef = input(3.4, title='Max. vol. cutoff', group = groupVFI)
+smoothVFI = input(false, group = groupVFI)
+
+ma(x, y) =>
+    sma_1 = ta.sma(x, y)
+    smoothVFI ? sma_1 : x
+
+typical = hlc3
+inter = math.log(typical) - math.log(typical[1])
+vinter = ta.stdev(inter, 30)
+cutoff = coef * vinter * close
+vave = ta.sma(volume, lengthVFI)[1]
+vmax = vave * vcoef
+vc = volume < vmax ? volume : vmax  //min( volume, vmax )
+mf = typical - typical[1]
+iff_1 = mf < -cutoff ? -vc : 0
+vcp = mf > cutoff ? vc : iff_1
+
+vfi = ma(math.sum(vcp, lengthVFI) / vave, 3)
+
+//plot(vfi, title='vfi', color=color.new(color.green, 0), linewidth=2)
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+
+
+// # ========================================================================= #
+// #                   |   T3 Averages  |
+// # ========================================================================= #
+//  Copyright by HPotter v1.0 21/05/2014
+var groupT3 = "T3 Averages Settings"
+
+lengthT3 = input.int(300, minval=1, group = groupT3)
+xPrice = close
+xe1 = ta.ema(xPrice, lengthT3)
+xe2 = ta.ema(xe1, lengthT3)
+xe3 = ta.ema(xe2, lengthT3)
+xe4 = ta.ema(xe3, lengthT3)
+xe5 = ta.ema(xe4, lengthT3)
+xe6 = ta.ema(xe5, lengthT3)
+b = 0.7
+c1 = -b * b * b
+c2 = 3 * b * b + 3 * b * b * b
+c3 = -6 * b * b - 3 * b - 3 * b * b * b
+c4 = 1 + 3 * b + b * b * b + 3 * b * b
+nT3Average = c1 * xe6 + c2 * xe5 + c3 * xe4 + c4 * xe3
+//plot(nT3Average, color=color.new(color.blue, 0), title='T3')
+// # ========================================================================= #
+// #                   |   T3 Averages  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Range Filter  5min  |
+// # ========================================================================= #
+var groupRF5 = "Range Filter 5min Settings"
+
+srcRF5 = input(defval=close, title='Source', group = groupRF5)
+perRF5 = input.int(defval=100, minval=1, title='Sampling Period', group = groupRF5)
+multRF5 = input.float(defval=2, minval=0.1, title='Range Multiplier', group = groupRF5)
+
+
+smoothrng(x, t, m) =>
+    wper = t * 2 - 1
+    avrng = ta.ema(math.abs(x - x[1]), t)
+    smoothrng = ta.ema(avrng, wper) * m
+    smoothrng
+smrng = smoothrng(srcRF5, perRF5, multRF5)
+
+// Range Filter
+
+rngfilt(x, r) =>
+    rngfilt = x
+    rngfilt := x > nz(rngfilt[1]) ? x - r < nz(rngfilt[1]) ? nz(rngfilt[1]) : x - r : x + r > nz(rngfilt[1]) ? nz(rngfilt[1]) : x + r
+    rngfilt
+filt = rngfilt(srcRF5, smrng)
+
+// Filter Direction
+
+upward = 0.0
+upward := filt > filt[1] ? nz(upward[1]) + 1 : filt < filt[1] ? 0 : nz(upward[1])
+downward = 0.0
+downward := filt < filt[1] ? nz(downward[1]) + 1 : filt > filt[1] ? 0 : nz(downward[1])
+
+// Colors
+
+filtcolor = upward > 0 ? color.lime : downward > 0 ? color.red : color.orange
+//filtplot = plot(filt, color=filtcolor, linewidth=3, title='Range Filter')
+
+// # ========================================================================= #
+// #                   |   Range Filter  5min  |
+// # ========================================================================= #
+
+
+
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+var groupATR = "ATR Bands Settings"
+
+// Inputs
+atrPeriod = input.int(title='ATR Period', defval=14, minval=1, group = groupATR)
+srcUpper = input(title='Source Upper', defval=close, inline = "ATRSource", group = groupATR)
+srcLower = input(title='Source Lower', defval=close, inline = "ATRSource",group = groupATR)
+atrMultiplierUpper = input.float(title='ATR Multiplier Upper', defval=3, inline = "ATRMult",group = groupATR)
+atrMultiplierLower = input.float(title='ATR Multiplier Lower', defval=3, inline = "ATRMult",group = groupATR)
+
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Plotting
+//plot(srcUpper + atr * atrMultiplierUpper, color=color.new(color.green, 0))
+//plot(srcLower - atr * atrMultiplierLower, color=color.new(color.red, 0))
+// # ========================================================================= #
+// #                   |   ATR Bands  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Waddah Attar Explosion V5 [SHK]  |
+// # ========================================================================= #
+// @author LazyBear 
+// Modified for Crypto Market by ShayanKM
+var groupWAE = "WAE Settings"
+
+sensitivity = input(150, title='Sensitivity', group = groupWAE)
+fastLength = input(28, title='FastEMA Length', inline = "WAELen", group = groupWAE)
+slowLength = input(150, title='SlowEMA Length', inline = "WAELen", group = groupWAE)
+channelLength = input(20, title='BB Channel Length', inline = "WAEBB", group = groupWAE)
+multWAE = input(2, title='BB Stdev Multiplier', inline = "WAEBB", group = groupWAE)
+multDz = input.float(5, title='Dead Zone Multiplier', group = groupWAE)
+
+DEAD_ZONE = nz(ta.rma(ta.tr(true), 100)) * multDz
+
+calc_macd(source, fastLength, slowLength) =>
+    fastMA = ta.ema(source, fastLength)
+    slowMA = ta.ema(source, slowLength)
+    fastMA - slowMA
+
+calc_BBUpper(source, length, multWAE) =>
+    basis = ta.sma(source, length)
+    dev = multWAE * ta.stdev(source, length)
+    basis + dev
+
+calc_BBLower(source, length, multWAE) =>
+    basis = ta.sma(source, length)
+    dev = multWAE * ta.stdev(source, length)
+    basis - dev
+
+t1 = (calc_macd(close, fastLength, slowLength) - calc_macd(close[1], fastLength, slowLength)) * sensitivity
+
+e1 = calc_BBUpper(close, channelLength, multWAE) - calc_BBLower(close, channelLength, multWAE)
+
+trendUp = t1 >= 0 ? t1 : 0
+trendDown = t1 < 0 ? -1 * t1 : 0
+
+//plot(trendUp, style=plot.style_columns, linewidth=1, color=trendUp < trendUp[1] ? color.lime : color.green, title='UpTrend')
+//plot(trendDown, style=plot.style_columns, linewidth=1, color=trendDown < trendDown[1] ? color.orange : color.red, title='DownTrend')
+//plot(e1, style=plot.style_line, linewidth=2, color=color.new(#A0522D, 0), title='ExplosionLine')
+//plot(DEAD_ZONE, color=color.new(color.blue, 0), linewidth=1, style=plot.style_cross, title='DeadZoneLine')
+// # ========================================================================= #
+// #                   |   Waddah Attar Explosion V5 [SHK]  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+var entryPrice = 0.0
+var priceLimit = 0.0
+var priceStop = 0.0
+var tradeDay = false
+var groupBackTest ="Back Test Settings"
+
+fromYear = input.int(defval=2022, title='From Year', minval=2020, inline = "BTFrom", group=groupBackTest)
+fromMomth = input.int(defval=1, title='From Month', minval=1, maxval=12, inline = "BTFrom", group=groupBackTest)
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, inline = "BTFrom", group=groupBackTest)
+toYear = input.int(defval=2300, title='To Year', minval=2020, inline = "BTTo", group=groupBackTest)
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, inline = "BTTo", group=groupBackTest)
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, inline = "BTTo", group=groupBackTest)
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+var groupTrade = "Trade Settings"
+
+
+ratioRR = input.float(1, title='R/R Ratio', step = 0.1, group=groupTrade)
+leverage = input.float(10, title='Leverage', step = 0.1, group=groupTrade)
+
+dd1 = input.bool(0, title='Sun',inline = "tradeDay", group=groupTrade)
+dd2 = input.bool(0, title='Mon', inline = "tradeDay", group=groupTrade)
+dd3 = input.bool(0, title='Tues', inline = "tradeDay", group=groupTrade)
+dd4 = input.bool(0, title='Wed', inline = "tradeDay", group=groupTrade)
+dd5 = input.bool(0, title='Thur', inline = "tradeDay", group=groupTrade)
+dd6 = input.bool(0, title='Fri', inline = "tradeDay", group=groupTrade)
+dd7 = input.bool(0, title='Sat', inline = "tradeDay", group=groupTrade)
+
+dayweek = dayofweek(time = time, timezone = 'America/New_York' )
+
+tradeDay := switch dayweek
+    1 => dd1
+    2 => dd2
+    3 => dd3
+    4 => dd4
+    5 => dd5
+    6 => dd6
+    7 => dd7
+    => false
+
+
+
+passADX = enableADX ? sig > lowestADX : true
+
+buyVFI = enableVFI ? vfi > 0 : true
+sellVFI = enableVFI ? vfi < 0 : true
+
+buyfilters = passADX and buyVFI and tradeDay
+sellfilters = passADX and sellVFI and tradeDay
+
+// you can set your own logic here
+
+buyT3 = close > nT3Average
+sellT3 = close < nT3Average
+
+buyRF = upward > 0
+sellRF = upward > 0
+
+buyWAE = e1 > DEAD_ZONE and trendUp
+sellWAE = e1 > DEAD_ZONE and trendDown
+
+buyCondition = buyfilters and buyT3 and buyRF and buyWAE and strategy.position_size == 0
+sellCondition = sellfilters and sellT3 and sellRF and sellWAE and strategy.position_size == 0
+
+if (strategy.position_size != 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+else
+    entryPrice := 0.0
+    priceLimit := 0.0
+    priceStop := 0.0
+// you can set your own logic here
+
+if(window())
+    if (buyCondition)
+        priceStop := srcLower - atr * atrMultiplierLower
+        priceLimit := close + (close - priceStop) * ratioRR 
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        strategy.exit("buyStoploss", "Buy", limit=priceLimit, stop=priceStop, alert_message="close")
+    if (sellCondition)
+        priceStop := srcUpper + atr * atrMultiplierUpper
+        priceLimit := close - (priceStop - close) * ratioRR
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        strategy.exit("sellStoploss", "Sell",limit=priceLimit, stop=priceStop, alert_message="close")
+        
+net_profit = strategy.netprofit + strategy.openprofit
+
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(priceLimit, "priceLimit", "", location = location.top)
+plotchar(priceStop, "priceStop", "", location = location.top)
+
+
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)
+
+
+plotchar(passADX, "passADX", "", location = location.top)
+plotchar(buyVFI, "buyVFI", "", location = location.top)
+plotchar(sellVFI, "sellVFI", "", location = location.top)
+plotchar(buyfilters, "buyfilters", "", location = location.top)
+plotchar(sellfilters, "sellfilters", "", location = location.top)
+plotchar(tradeDay, "tradeDay", "", location = location.top)
+plotchar(dayofweek(time = time, timezone = 'America/New_York' ) , "dayofweek(time = dayofweek, timezone = 'America/New_York' ) ", "", location = location.top)

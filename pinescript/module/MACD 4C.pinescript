@@ -1,0 +1,27 @@
+// # ========================================================================= #
+// #                   |   MACD 4C  |
+// # ========================================================================= #
+//MACD 4C by vkno422 + signal line - squattter by squattter v5
+
+var groupMACD4C = "MACD 4C Settings"
+
+fastMA = input.int(title='Fast moving average', defval=12, minval=7, group = groupMACD4C)
+slowMA = input.int(title='Slow moving average', defval=26, minval=7, group = groupMACD4C)
+lastColor = color.yellow
+[currMacd, _, _] = ta.macd(close[0], fastMA, slowMA, 9)
+[prevMacd, _, _] = ta.macd(close[1], fastMA, slowMA, 9)
+
+signalLength = input.int(9, minval=1, group = groupMACD4C)
+signal = ta.sma(currMacd, signalLength)
+
+
+//plotColor = currMacd > 0 ? currMacd > prevMacd ? color.lime : color.green : currMacd < prevMacd ? color.maroon : color.red
+//plot(currMacd, style=plot.style_columns, color=plotColor, linewidth=3, transp=20)
+//plot(0, title='Zero line', linewidth=1, color=color.new(color.gray, 0))
+//plot(signal, color=color.new(color.white, 0), title='Signal')
+
+buyMACD = signal[1] > 0 and currMacd > prevMacd andcurrMacd > signal
+sellMACD = signal[1] < 0 and currMacd < prevMacd and currMacd < signal
+// # ========================================================================= #
+// #                   |   MACD 4C  |
+// # ========================================================================= #

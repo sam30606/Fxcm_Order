@@ -1,0 +1,263 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("8-Scalping MACD+3EMA+RSI", shorttitle="8-Scalping MACD+3EMA+RSI", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000,commission_value=0.036 )
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen_1 = input.int(9, minval=1, title="Length", group="EMA Settings-1")
+emaSrc_1 = input(close, title="Source", group="EMA Settings-1")
+emaOut_1 = ta.ema(emaSrc_1, emaLen_1)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen_2 = input.int(55, minval=1, title="Length", group="EMA Settings-2")
+emaSrc_2 = input(close, title="Source", group="EMA Settings-2")
+emaOut_2 = ta.ema(emaSrc_2, emaLen_2)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen_3 = input.int(200, minval=1, title="Length", group="EMA Settings-3")
+emaSrc_3 = input(close, title="Source", group="EMA Settings-3")
+emaOut_3 = ta.ema(emaSrc_3, emaLen_3)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+
+rsiLengthInput = input.int(14, minval=1, title="RSI Length", group="RSI Settings")
+rsiSourceInput = input.source(close, "Source", group="RSI Settings")
+rsiOverbuy = input.int(80, minval=1, title="RSI Overbuy", group="RSI Settings")
+rsiOversell = input.int(10, minval=1, title="RSI Oversell", group="RSI Settings")
+
+
+rsiUp = ta.rma(math.max(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsiDown = ta.rma(-math.min(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsi = rsiDown == 0 ? 100 : rsiUp == 0 ? 0 : 100 - (100 / (1 + rsiUp / rsiDown))
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+adxTime = input.timeframe('5', "Timeframe", group="ADX Settings")
+adxlen = input(14, title="ADX Smoothing", group="ADX Settings")
+dilen = input(14, title="DI Length", group="ADX Settings")
+dirmov(len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, len)
+	plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+	[plus, minus]
+adx(dilen, adxlen) =>
+	[plus, minus] = dirmov(dilen)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+sig = request.security(syminfo.tickerid, adxTime, adx(dilen, adxlen))
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+
+// # ========================================================================= #
+// #                   |   Moving Average Convergence Divergenc  |
+// # ========================================================================= #
+
+// Getting inputs
+macdTime = input.timeframe('1', "Timeframe", group="MACD Settings")
+fast_length = input(title="Fast Length", defval=12, group="MACD Settings")
+slow_length = input(title="Slow Length", defval=26, group="MACD Settings")
+macdSrc = input(title="Source", defval=close, group="MACD Settings")
+signal_length = input.int(title="Signal Smoothing",  minval = 1, maxval = 50, defval = 9, group="MACD Settings")
+sma_source = input.string(title="Oscillator MA Type",  defval="EMA", options=["SMA", "EMA"], group="MACD Settings")
+sma_signal = input.string(title="Signal Line MA Type", defval="EMA", options=["SMA", "EMA"], group="MACD Settings")
+
+// Calculating
+fast_ma = sma_source == "SMA" ? request.security(syminfo.tickerid, macdTime, ta.sma(macdSrc, fast_length)) : request.security(syminfo.tickerid, macdTime, ta.ema(macdSrc, fast_length))
+slow_ma = sma_source == "SMA" ? request.security(syminfo.tickerid, macdTime, ta.sma(macdSrc, slow_length)) : request.security(syminfo.tickerid, macdTime, ta.ema(macdSrc, slow_length))
+macd = fast_ma - slow_ma
+signal = sma_signal == "SMA" ? request.security(syminfo.tickerid, macdTime, ta.sma(macd, signal_length)) : request.security(syminfo.tickerid, macdTime, ta.ema(macd, signal_length))
+hist = macd - signal
+
+mult = input.float(1.2, minval=0.001, maxval=50, title="StdDev")
+basis = ta.sma(hist, 34)
+dev = mult * ta.stdev(hist, 34)
+upper = basis + dev
+lower = basis - dev
+
+//offset = input.int(1, "Offset", minval = -500, maxval = 500)
+//p1 = plot(upper, "Upper", color=#2962FF, offset = offset)
+//p2 = plot(lower, "Lower", color=#2962FF, offset = offset)
+
+
+//hline(0, "Zero Line", color=color.new(#787B86, 50))
+//plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)))
+//plot(macd, title="MACD", color=col_macd)
+//plot(signal, title="Signal", color=col_signal)
+// # ========================================================================= #
+// #                   |   Moving Average Convergence Divergenc  |
+// # ========================================================================= #
+
+
+
+
+var float entryPrice = 0.0
+var float price_stop = 0.0
+var float price_limit = 0.0
+var float multTPQTY = 0.0
+
+var bool trailTrigEnable = false
+fromYear = input.int(defval=2022, title='From Year', minval=2020, group="Back Test Settings")
+fromMomth = input.int(defval=6, title='From Month', minval=1, maxval=12, group="Back Test Settings")
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, group="Back Test Settings")
+toYear = input.int(defval=2300, title='To Year', minval=2020, group="Back Test Settings")
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, group="Back Test Settings")
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, group="Back Test Settings")
+
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+stop_loss_and_tp = input(title='Enable Stop Loss and Take Profit', defval=true, group="Trace Stop Settings")
+trail_stop = input(title='Enable Trail Stop', defval=true, group="Trace Stop Settings")
+buy_stop_loss = input.float(1.5, title='buy_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+sell_stop_loss = input.float(1.5, title='sell_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+buy_tp = input.float(2.2, title='buy_tp %', step = 0.1, group="Trace Stop Settings")/100
+sell_tp = input.float(2.2, title='sell_tp %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_long = input.float(1.2, title='trailTrig_long %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_short = input.float(1, title='trailTrig_short %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_long = input.float(50, title='trail_stop_long %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_short = input.float(50, title='trail_stop_short %', step = 0.1, group="Trace Stop Settings")/100
+adxLowest = input.float(31, title='ADX Lowest', step = 0.1, group="Trade Settings")
+
+var multTP = "Multpile Take Profit Settings"
+buyMultTPQTY_1 = input.float(25, title='Buy TP_1 QTY', step = 0.1, inline = "buyMult_1",group=multTP )
+buyMultTPPrice_1 = input.float(0.5, title='Buy TP_1 Price %', step = 0.1, inline = "buyMult_1",group=multTP )/100
+buyMultTPQTY_2 = input.float(25, title='Buy TP_2 QTY', step = 0.1, inline = "buyMult_2",group=multTP )
+buyMultTPPrice_2 = input.float(1, title='Buy TP_2 Price %', step = 0.1, inline = "buyMult_2",group=multTP )/100
+buyMultTPQTY_3 = input.float(25, title='Buy TP_3 QTY', step = 0.1, inline = "buyMult_3",group=multTP )
+buyMultTPPrice_3 = input.float(1.5, title='Buy TP_3 Price %', step = 0.1, inline = "buyMult_3",group=multTP )/100
+buyMultTPQTY_4 = input.float(100, title='Buy TP_4 QTY', step = 0.1, inline = "buyMult_4",group=multTP )
+buyMultTPPrice_4 = input.float(2, title='Buy TP_4 Price %', step = 0.1, inline = "buyMult_4",group=multTP )/100
+
+sellMultTPQTY_1 = input.float(25, title='Sell TP_1 QTY', step = 0.1, inline = "sellMult_1",group=multTP )
+sellMultTPPrice_1 = input.float(0.5, title='Sell TP_1 Price %', step = 0.1, inline = "sellMult_1",group=multTP )/100
+sellMultTPQTY_2 = input.float(25, title='Sell TP_2 QTY', step = 0.1, inline = "sellMult_2",group=multTP )
+sellMultTPPrice_2 = input.float(1, title='Sell TP_2 Price %', step = 0.1, inline = "sellMult_2",group=multTP )/100
+sellMultTPQTY_3 = input.float(25, title='Sell TP_3 QTY', step = 0.1, inline = "sellMult_3",group=multTP )
+sellMultTPPrice_3 = input.float(1.5, title='Sell TP_3 Price %', step = 0.1, inline = "sellMult_3",group=multTP )/100
+sellMultTPQTY_4 = input.float(100, title='Sell TP_4 QTY', step = 0.1, inline = "sellMult_4",group=multTP )
+sellMultTPPrice_4 = input.float(2, title='Sell TP_4 Price %', step = 0.1, inline = "sellMult_4",group=multTP )/100
+
+adxPass = sig > adxLowest
+// you can set your own logic here
+buyEMA = emaOut_1 > emaOut_2 and emaOut_2 > emaOut_3
+sellEMA = emaOut_1 < emaOut_2 and emaOut_2 < emaOut_3
+
+buyMACD = hist < 0 and ( hist < lower and hist[1] >= hist )
+sellMACD = hist > 0 and ( hist > upper and  hist[1] < hist )
+
+buyRSI = rsi > 51 and rsi < rsiOverbuy
+sellRSI = rsi < 49 and rsi > rsiOversell
+
+buyCondition = adxPass and buyEMA and buyMACD and buyRSI and strategy.position_size == 0
+sellCondition = adxPass and sellEMA and sellMACD and sellRSI and strategy.position_size == 0
+
+
+// you can set your own logic here
+
+multTPPrice(pcnt) =>
+    strategy.position_size > 0 ? entryPrice * (1 + pcnt) : strategy.position_size < 0 ? entryPrice * (1 - pcnt) : float(na)
+
+
+if (strategy.position_size > 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+    
+    price_stop := switch 
+        close > multTPPrice(buyMultTPPrice_4) => multTPPrice(buyMultTPPrice_4)
+        close > multTPPrice(buyMultTPPrice_3) => multTPPrice(buyMultTPPrice_3)
+        close > multTPPrice(buyMultTPPrice_2) => multTPPrice(buyMultTPPrice_2)
+        close > multTPPrice(buyMultTPPrice_1) => multTPPrice(buyMultTPPrice_1)
+        => entryPrice * (1 - buy_stop_loss)
+
+
+else if (strategy.position_size < 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1) 
+    price_stop := switch 
+        close < multTPPrice(sellMultTPPrice_4) => multTPPrice(sellMultTPPrice_4)
+        close < multTPPrice(sellMultTPPrice_3) => multTPPrice(sellMultTPPrice_3)
+        close < multTPPrice(sellMultTPPrice_2) => multTPPrice(sellMultTPPrice_2)
+        close < multTPPrice(sellMultTPPrice_1) => multTPPrice(sellMultTPPrice_1)
+        => entryPrice * (1 + sell_stop_loss)
+
+else
+    entryPrice := 0
+    price_stop := 0
+    price_limit := 0
+    multTPQTY := 0
+
+if(window())
+    switch
+        buyCondition => strategy.entry('Buy', strategy.long, alert_message = "buy")
+        sellCondition => strategy.entry('Sell', strategy.short, alert_message = "sell")
+
+    if (strategy.position_size != 0)
+        strategy.exit("buy_x1", "Buy", qty_percent = buyMultTPQTY_1,limit = multTPPrice(buyMultTPPrice_1), stop=price_stop, alert_message="close", comment_profit = "x1", comment_loss = "loss")
+        strategy.exit("buy_x2", "Buy", qty_percent = buyMultTPQTY_2,limit = multTPPrice(buyMultTPPrice_2), stop=price_stop, alert_message="close", comment_profit = "x2", comment_loss = "loss")
+        strategy.exit("buy_x3", "Buy", qty_percent = buyMultTPQTY_3,limit = multTPPrice(buyMultTPPrice_3), stop=price_stop, alert_message="close", comment_profit = "x3", comment_loss = "loss")
+        strategy.exit("buy_x4", "Buy", qty_percent = buyMultTPQTY_4,limit = multTPPrice(buyMultTPPrice_4), stop=price_stop, alert_message="close", comment_profit = "x4", comment_loss = "loss")
+        strategy.exit("sell_x1", "Sell", qty_percent = sellMultTPQTY_1,limit = multTPPrice(sellMultTPPrice_1), stop=price_stop, alert_message="close", comment_profit = "x1", comment_loss = "loss")
+        strategy.exit("sell_x2", "Sell", qty_percent = sellMultTPQTY_2,limit = multTPPrice(sellMultTPPrice_2), stop=price_stop, alert_message="close", comment_profit = "x2", comment_loss = "loss")
+        strategy.exit("sell_x3", "Sell", qty_percent = sellMultTPQTY_3,limit = multTPPrice(sellMultTPPrice_3), stop=price_stop, alert_message="close", comment_profit = "x3", comment_loss = "loss")
+        strategy.exit("sell_x4", "Sell", qty_percent = sellMultTPQTY_4,limit = multTPPrice(sellMultTPPrice_4), stop=price_stop, alert_message="close", comment_profit = "x4", comment_loss = "loss")
+
+net_profit = strategy.netprofit + strategy.openprofit
+
+
+//plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(close, "close", "", location = location.top)
+plotchar(multTPQTY, "multTPQTY", "", location = location.top)
+plotchar(price_limit, "price_limit", "", location = location.top)
+plotchar(price_stop, "price_stop", "", location = location.top)
+
+idd = strategy.closedtrades.entry_id(strategy.opentrades - 1)
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)
+plotchar(strategy.closedtrades.profit(strategy.closedtrades - 1), "sellCondition", "", location = location.top)
+label.new(strategy.closedtrades.exit_bar_index(strategy.closedtrades - 1), high, strategy.closedtrades.exit_id(strategy.closedtrades - 1))

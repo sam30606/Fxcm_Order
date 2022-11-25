@@ -1,0 +1,91 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+var groupADX = "Average Directional Index Settings"
+
+enableADX = input.bool(1, title = "Enable ADX?", group = groupADX) 
+timeADX = input.timeframe('5', "Timeframe", group=groupADX)
+lenADX = input(14, title="ADX Smoothing", group=groupADX)
+lenDI = input(14, title="DI Length", group=groupADX)
+lowestADX = input.float(32, title='ADX Lowest', step = 0.1, group=groupADX)
+
+dirmov(_len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, _len)
+	plus = fixnan(100 * ta.rma(plusDM, _len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, _len) / truerange)
+	[plus, minus]
+adx(lenDI, lenADX) =>
+	[plus, minus] = dirmov(lenDI)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lenADX)
+sig = request.security(syminfo.tickerid, timeADX, adx(lenDI, lenADX))
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+// @author LazyBear
+var groupVFI = "Volume Flow Indicator Settings"
+
+enableVFI = input.bool(1, title = "Enable VFI?", group = groupVFI) 
+lengthVFI = input(130, title='VFI length', group = groupVFI)
+coef = input(1, group = groupVFI)
+vcoef = input(3.4, title='Max. vol. cutoff', group = groupVFI)
+smoothVFI = input(false, group = groupVFI)
+
+maVFI(x, y) =>
+    sma_1 = ta.sma(x, y)
+    smoothVFI ? sma_1 : x
+
+typical = hlc3
+inter = math.log(typical) - math.log(typical[1])
+vinter = ta.stdev(inter, 30)
+cutoff = coef * vinter * close
+vave = ta.sma(volume, lengthVFI)[1]
+vmax = vave * vcoef
+vc = volume < vmax ? volume : vmax  //min( volume, vmax )
+mf = typical - typical[1]
+iff_1 = mf < -cutoff ? -vc : 0
+vcp = mf > cutoff ? vc : iff_1
+
+vfi = maVFI(math.sum(vcp, lengthVFI) / vave, 3)
+
+//plot(vfi, title='vfi', color=color.new(color.green, 0), linewidth=2)
+// # ========================================================================= #
+// #                   |   Volume Flow Indicator [LazyBear]  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #
+adxDIlen = input(14, group="ADXDI settings")
+
+
+TrueRange = math.max(math.max(high - low, math.abs(high - nz(close[1]))), math.abs(low - nz(close[1])))
+DirectionalMovementPlus = high - nz(high[1]) > nz(low[1]) - low ? math.max(high - nz(high[1]), 0) : 0
+DirectionalMovementMinus = nz(low[1]) - low > high - nz(high[1]) ? math.max(nz(low[1]) - low, 0) : 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - nz(SmoothedTrueRange[1]) / adxDIlen + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - nz(SmoothedDirectionalMovementPlus[1]) / adxDIlen + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - nz(SmoothedDirectionalMovementMinus[1]) / adxDIlen + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+
+// # ========================================================================= #
+// #                   |   ADX and DI  |
+// # ========================================================================= #

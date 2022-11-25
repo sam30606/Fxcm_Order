@@ -1,0 +1,43 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+// # ========================================================================= #
+// #                   |   Range Filter 5min  |
+// # ========================================================================= #
+var groupRF5 = "Range Filter 5min Settings"
+
+srcRF5 = input(defval=close, title='Source', group = groupRF5)
+perRF5 = input.int(defval=100, minval=1, title='Sampling Period', group = groupRF5)
+multRF5 = input.float(defval=3.0, minval=0.1, title='Range Multiplier', group = groupRF5)
+
+
+smoothrng(x, t, m) =>
+    wper = t * 2 - 1
+    avrng = ta.ema(math.abs(x - x[1]), t)
+    smoothrng = ta.ema(avrng, wper) * m
+    smoothrng
+smrng = smoothrng(srcRF5, perRF5, multRF5)
+
+// Range Filter
+
+rngfilt(x, r) =>
+    rngfilt = x
+    rngfilt := x > nz(rngfilt[1]) ? x - r < nz(rngfilt[1]) ? nz(rngfilt[1]) : x - r : x + r > nz(rngfilt[1]) ? nz(rngfilt[1]) : x + r
+    rngfilt
+filt = rngfilt(srcRF5, smrng)
+
+// Filter Direction
+
+upward = 0.0
+upward := filt > filt[1] ? nz(upward[1]) + 1 : filt < filt[1] ? 0 : nz(upward[1])
+downward = 0.0
+downward := filt < filt[1] ? nz(downward[1]) + 1 : filt > filt[1] ? 0 : nz(downward[1])
+
+// Colors
+
+filtcolor = upward > 0 ? color.lime : downward > 0 ? color.red : color.orange
+//filtplot = plot(filt, color=filtcolor, linewidth=3, title='Range Filter')
+
+// # ========================================================================= #
+// #                   |   Range Filter 5min  |
+// # ========================================================================= #

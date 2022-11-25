@@ -1,0 +1,27 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+// # ========================================================================= #
+// #                   |   T3 Averages  |
+// # ========================================================================= #
+//  Copyright by HPotter v1.0 21/05/2014
+var groupT3 = "T3 Averages Settings"
+
+lengthT3 = input.int(5, minval=1, group = groupT3)
+xPrice = close
+xe1 = ta.ema(xPrice, lengthT3)
+xe2 = ta.ema(xe1, lengthT3)
+xe3 = ta.ema(xe2, lengthT3)
+xe4 = ta.ema(xe3, lengthT3)
+xe5 = ta.ema(xe4, lengthT3)
+xe6 = ta.ema(xe5, lengthT3)
+b = 0.7
+c1 = -b * b * b
+c2 = 3 * b * b + 3 * b * b * b
+c3 = -6 * b * b - 3 * b - 3 * b * b * b
+c4 = 1 + 3 * b + b * b * b + 3 * b * b
+nT3Average = c1 * xe6 + c2 * xe5 + c3 * xe4 + c4 * xe3
+//plot(nT3Average, color=color.new(color.blue, 0), title='T3')
+// # ========================================================================= #
+// #                   |   T3 Averages  |
+// # ========================================================================= #

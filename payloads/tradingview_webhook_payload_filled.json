@@ -1,0 +1,9 @@
+{
+  "passphrase": "*******************",
+  "total_order": 2,
+  "ticker": "EUR/USD",
+  "side": "buy",
+  "order_price": 1.03225,
+  "limit_price": 1.04225,
+  "stop_price": 1.02225
+}

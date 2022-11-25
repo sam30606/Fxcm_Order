@@ -1,0 +1,25 @@
+// # ========================================================================= #
+// #                   |   Parabolic SAR  |
+// # ========================================================================= #
+// Copyright (c) 2019-present, Alex Orekhov (everget)
+
+var groupSAR = "Parabolic SAR Settings"
+
+start = input.float(title='Start', step=0.00005, defval=0.00252, group = groupSAR)
+increment = input.float(title='Increment', step=0.00005, defval=0.00133, group = groupSAR)
+maximum = input.float(title='Maximum', step=0.01, defval=0.220, group = groupSAR)
+width = input.int(title='Point Width', minval=1, defval=20, group = groupSAR)
+highlightStartPoints = input(title='Highlight Start Points ?', defval=true, group = groupSAR)
+
+psar = ta.sar(start, increment, maximum)
+dir = psar < close ? 1 : -1
+
+psarColor = psar < close ? #3388bb : #fdcc02
+
+//barcolor(dir == 1 ? color.green : color.red)
+
+buySAR = dir == 1
+sellSAR = dir == -1
+// # ========================================================================= #
+// #                   |   Parabolic SAR  |
+// # ========================================================================= #

@@ -1,0 +1,141 @@
+//@version=5
+// Created By Lij_MC
+
+indicator(title='Trend Meter')
+
+// MA Inputs
+
+MA1_Length = input.int(5, title='Fast MA', minval=1, group='Trend Bar 1 - Settings', inline='TB1 Fast')
+MA1_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 1 - Settings', inline='TB1 Fast')
+
+MA2_Length = input.int(11, title='Slow MA', minval=1, group='Trend Bar 1 - Settings', inline='TB1 Slow')
+MA2_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 1 - Settings', inline='TB1 Slow')
+
+MA3_Length = input.int(13, title='Fast MA', minval=1, group='Trend Bar 2 - Settings', inline='TB2 Fast')
+MA3_Type = input.string(title='', defval='EMA', options=['EMA', 'SMA'], group='Trend Bar 2 - Settings', inline='TB2 Fast')
+
+MA4_Length = input.int(36, title='Slow MA', minval=1, group='Trend Bar 2 - Settings', inline='TB2 Slow')
+MA4_Type = input.string(title='', defval='SMA', options=['EMA', 'SMA'], group='Trend Bar 2 - Settings', inline='TB2 Slow')
+
+
+// MA Calculations
+
+Close = request.security(syminfo.tickerid, timeframe.period, close, lookahead=barmerge.lookahead_on)
+
+
+MA1 = if MA1_Type == 'SMA'
+    ta.sma(Close, MA1_Length)
+else
+    ta.ema(Close, MA1_Length)
+
+
+MA2 = if MA2_Type == 'SMA'
+    ta.sma(Close, MA2_Length)
+else
+    ta.ema(Close, MA2_Length)
+
+
+MA3 = if MA3_Type == 'SMA'
+    ta.sma(Close, MA3_Length)
+else
+    ta.ema(Close, MA3_Length)
+
+
+MA4 = if MA4_Type == 'SMA'
+    ta.sma(Close, MA4_Length)
+else
+    ta.ema(Close, MA4_Length)
+
+
+// MA Crossover Condition
+
+MACrossover1 = MA1 > MA2 ? 1 : 0
+
+MACrossover2 = MA3 > MA4 ? 1 : 0
+
+
+// MACD and MOM & DAD - Top Dog Trading
+
+// Standard MACD Calculations
+
+MACDfastMA = 12
+MACDslowMA = 26
+MACDsignalSmooth = 9
+
+
+MACDLine = ta.ema(close, MACDfastMA) - ta.ema(close, MACDslowMA)
+
+SignalLine = ta.ema(MACDLine, MACDsignalSmooth)
+
+MACDHistogram = MACDLine - SignalLine
+
+
+// MACD- Background Color Change Condition
+
+MACDHistogramCross = MACDHistogram > 0 ? 1 : 0
+
+MACDLineOverZero = MACDLine > 0 ? 1 : 0
+
+MACDLineOverZeroandHistogramCross = MACDHistogramCross and MACDLineOverZero ? 1 : 0
+
+MACDLineUnderZeroandHistogramCross = not MACDHistogramCross and not MACDLineOverZero ? 1 : 0
+
+
+// Fast MACD Calculations
+
+FastMACDfastMA = 8
+FastMACDslowMA = 21
+FastMACDsignalSmooth = 5
+
+
+FastMACDLine = ta.ema(close, FastMACDfastMA) - ta.ema(close, FastMACDslowMA)
+
+FastSignalLine = ta.ema(FastMACDLine, FastMACDsignalSmooth)
+
+FastMACDHistogram = FastMACDLine - FastSignalLine
+
+// Fast MACD- Background Color Change Condition
+
+FastMACDHistogramCross = FastMACDHistogram > 0 ? 1 : 0
+
+// RSI 5 Trend Barmeter Calculations
+
+RSI5 = ta.rsi(close, 5)
+
+RSI5Above50 = RSI5 > 50 ? 1 : 0
+
+
+// RSI 5 Trend Barmeter Calculations
+
+RSI13 = ta.rsi(close, 13)
+
+
+// Linear Regression Calculation For RSI Signal Line
+
+SignalLineLength1 = 21
+
+x = bar_index
+y = RSI13
+x_ = ta.sma(x, SignalLineLength1)
+y_ = ta.sma(y, SignalLineLength1)
+mx = ta.stdev(x, SignalLineLength1)
+my = ta.stdev(y, SignalLineLength1)
+c = ta.correlation(x, y, SignalLineLength1)
+slope = c * (my / mx)
+inter = y_ - slope * x_
+LinReg1 = x * slope + inter
+
+
+RSISigDirection = LinReg1 > LinReg1[1] ? 1 : 0
+
+RSISigCross = RSI13 > LinReg1 ? 1 : 0
+
+RSI13Above50 = RSI13 > 50 ? 1 : 0
+
+green = FastMACDHistogramCross and RSI13Above50 and RSI5Above50 and MACrossover1 and MACrossover2
+red = not FastMACDHistogramCross and not RSI13Above50 and not RSI5Above50 and not MACrossover1 and not MACrossover2
+plot(green ? 135 : na, title='green', style=plot.style_circles, color=color.new(color.green, 15), linewidth=2, transp=18)
+plot(red ? 135 : na, title='red', style=plot.style_circles, color=color.new(color.red, 20), linewidth=2, transp=18)
+
+
+

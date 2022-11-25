@@ -1,0 +1,42 @@
+Name,Value
+"__indicatorName","12-BB"
+"Enable ADX?",true
+"Timeframe","Chart"
+"ADX Smoothing",14
+"DI Length",14
+"ADX Lowest",21
+"Enable VFI?",false
+"VFI length",180
+"Coef",2
+"Max. vol. cutoff",3.4
+"SmoothVFI",false
+"ATR Period",14
+"Source Upper","close"
+"Source Lower","close"
+"ATR Multiplier Upper",3
+"ATR Multiplier Lower",3
+"Length",20
+"Mult",2
+"From Year",2021
+"From Month",11
+"From Day",1
+"To Year",2300
+"To Month",1
+"To Day",1
+"Buy Stop Loss Method","tick"
+"Buy Stop Loss %",195
+"Sell Stop Loss Method","tick"
+"Sell Stop Loss %",195
+"Buy Take Profit Method","tick"
+"Buy Take Progit %",75
+"Sell Take Profit Method","tick"
+"Sell Take Progit %",90
+"R/R Ratio",1
+"Leverage",10
+"Sun",true
+"Mon",true
+"Tues",true
+"Wed",true
+"Thur",true
+"Fri",true
+"Sat",true

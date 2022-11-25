@@ -1,0 +1,174 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © sam30606
+
+//@version=5
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+strategy("sample", shorttitle="sample", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000,commission_value=0.036 )
+
+// # ========================================================================= #
+// #                   |   STRATEGY  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+emaLen = input.int(200, minval=1, title="Length", group="EMA Settings")
+emaSrc = input(close, title="Source", group="EMA Settings")
+offset = input.int(title="Offset", defval=0, minval=-500, maxval=500, group="EMA Settings")
+emaOut = ta.ema(emaSrc, emaLen)
+
+// # ========================================================================= #
+// #                   |   Moving Average Exponential  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+adxlen = input(14, title="ADX Smoothing", group="ADX settings")
+dilen = input(14, title="DI Length", group="ADX settings")
+dirmov(len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, len)
+	plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+	[plus, minus]
+adx(dilen, adxlen) =>
+	[plus, minus] = dirmov(dilen)
+	sum = plus + minus
+	adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+sig = adx(dilen, adxlen)
+// # ========================================================================= #
+// #                   |   Average Directional Index  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+
+rsiLengthInput = input.int(14, minval=1, title="RSI Length", group="RSI Settings")
+rsiSourceInput = input.source(close, "Source", group="RSI Settings")
+maTypeInput = input.string("SMA", title="MA Type", options=["SMA", "Bollinger Bands", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group="MA Settings")
+maLengthInput = input.int(14, title="MA Length", group="MA Settings")
+bbMultInput = input.float(2.0, minval=0.001, maxval=50, title="BB StdDev", group="MA Settings")
+
+rsiUp = ta.rma(math.max(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsiDown = ta.rma(-math.min(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsi = rsiDown == 0 ? 100 : rsiUp == 0 ? 0 : 100 - (100 / (1 + rsiUp / rsiDown))
+
+// # ========================================================================= #
+// #                   |   Relative Strength Index  |
+// # ========================================================================= #
+
+
+
+
+
+
+var float entryPrice = 0.0
+var float enableTrigPrice = 0.0
+var float buyATRLoss = 0.0
+var float sellATRLoss = 0.0
+var float price_stop = 0.0
+var float price_limit = 0.0
+
+var bool trailTrigEnable = false
+fromYear = input.int(defval=2022, title='From Year', minval=2020, group="Back Test Settings")
+fromMomth = input.int(defval=8, title='From Month', minval=1, maxval=12, group="Back Test Settings")
+fromDay = input.int(defval=1, title='From Day', minval=1, maxval=31, group="Back Test Settings")
+toYear = input.int(defval=2300, title='To Year', minval=2020, group="Back Test Settings")
+toMomth = input.int(defval=1, title='To Month', minval=1, maxval=12, group="Back Test Settings")
+toDay = input.int(defval=1, title='To Day', minval=1, maxval=31, group="Back Test Settings")
+
+timeStart = timestamp(fromYear, fromMomth, fromDay, 00, 00)
+timeFinish = timestamp(toYear, toMomth, toDay, 23, 59)
+window()=>time>=timeStart and time <= timeFinish ? true : false
+
+stop_loss_and_tp = input(title='Enable Stop Loss and Take Profit', defval=true, group="Trace Stop Settings")
+trail_stop = input(title='Enable Trail Stop', defval=true, group="Trace Stop Settings")
+buy_stop_loss = input.float(1, title='buy_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+sell_stop_loss = input.float(1, title='sell_stop_loss %', step = 0.1, group="Trace Stop Settings")/100
+buy_tp = input.float(1, title='buy_tp %', step = 0.1, group="Trace Stop Settings")/100
+sell_tp = input.float(1, title='sell_tp %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_long = input.float(0.01, title='trailTrig_long %', step = 0.1, group="Trace Stop Settings")/100
+trailTrig_short = input.float(0.01, title='trailTrig_short %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_long = input.float(0.005, title='trail_stop_long %', step = 0.1, group="Trace Stop Settings")/100
+trail_stop_short = input.float(0.005, title='trail_stop_short %', step = 0.1, group="Trace Stop Settings")/100
+adxLowest = input.float(20, title='ADX Lowest', step = 0.1, group="Trade Settings")
+
+adxPass = sig > adxLowest
+buyDI = DIPlus > DIMinus
+sellDI = DIPlus < DIMinus
+buyEMA = low > emaOut
+sellEMA = high < emaOut
+// you can set your own logic here
+
+
+
+buyCondition = 0
+sellCondition = 0
+
+
+// you can set your own logic here
+if (strategy.position_size > 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
+    enableTrigPrice := enableTrigPrice ? enableTrigPrice : entryPrice
+    if (close >= enableTrigPrice * (1 + trailTrig_long))
+        trailTrigEnable := true
+        price_stop := enableTrigPrice * (1 + trail_stop_long)
+        enableTrigPrice := price_stop
+    else if (close < entryPrice * (1 + trailTrig_long) and trailTrigEnable == false)
+        price_stop := entryPrice * (1 - buy_stop_loss)
+
+
+else if (strategy.position_size < 0)
+    entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1) 
+    enableTrigPrice := enableTrigPrice ? enableTrigPrice : entryPrice
+    if (close <= enableTrigPrice * (1 - trailTrig_short))
+        trailTrigEnable := true
+        price_stop := enableTrigPrice * (1 - trail_stop_short)
+        enableTrigPrice := price_stop
+    else if (close > entryPrice * (1 - trailTrig_short) and trailTrigEnable == false)
+        price_stop := entryPrice * (1 + sell_stop_loss)
+
+else
+    entryPrice := 0
+    price_stop := 0
+    enableTrigPrice := 0
+    trailTrigEnable := false
+
+
+if(window())
+    if (buyCondition)
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+
+    if (sellCondition)
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+
+    if (strategy.position_size != 0)
+        strategy.exit("buyStoploss", "Buy", limit=entryPrice * (1 + buy_tp), stop=price_stop, alert_message="close")
+        strategy.exit("sellStoploss", "Sell",limit=entryPrice * (1 - sell_tp), stop=price_stop, alert_message="close")
+
+net_profit = strategy.netprofit + strategy.openprofit
+
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.new(color =color.red  , transp = 50))
+// # ========================================================================= #
+// #                   |   Print  |
+// # ========================================================================= #
+
+plotchar(entryPrice, "entryPrice", "", location = location.top)
+
+plotchar(price_limit, "price_limit", "", location = location.top)
+plotchar(price_stop, "price_stop", "", location = location.top)
+
+
+plotchar(buyCondition, "buyCondition", "", location = location.top)
+plotchar(sellCondition, "sellCondition", "", location = location.top)

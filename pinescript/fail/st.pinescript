@@ -1,0 +1,64 @@
+//@version=5
+strategy("SuperTrend Trapping Candle Strategy", shorttitle="MY-ST", margin_long=1, margin_short=1, overlay=true)
+
+backtest_year = input(2019, title='backtest_year')
+backtest_month = input.int(01, title='backtest_month', minval=1, maxval=12)
+backtest_day = input.int(01, title='backtest_day', minval=1, maxval=31)
+start_time = timestamp(backtest_year, backtest_month, backtest_day, 00, 00)
+stop_loss_and_tp = input(title='Enable Stop Loss and Take Profit', defval=true)
+trail_stop = input(title='Enable Trail Stop', defval=true)
+buy_stop_loss = input(10, title='buy_stop_loss %')/100
+sell_stop_loss = input(10, title='sell_stop_loss %')/100
+buy_tp = input(15, title='buy_tp %')/100
+sell_tp = input(15, title='sell_tp %')/100
+trail_stop_long = input(1, title='trail_stop_long')
+trail_stop_short = input(10, title='trail_stop_short')
+trail_stop_long_offset = input(8 ,title='trail_stop_long_offset')
+trail_stop_short_offset = input(8, title='trail_stop_short_offset')
+
+
+
+// Inputs
+atrPeriod = input.int(10, "ATR Length")
+factor = input.int(2, "Factor")
+candleDivider = input.float(0.003, "Candle Height", step=0.0001)
+
+
+// Supertrend
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+plot(direction < 0 ? supertrend : na, "Up Trend", color = color.green, style=plot.style_linebr)
+plot(direction < 0? na : supertrend, "Down Trend", color = color.red, style=plot.style_linebr)
+
+
+//Trapping canlde
+isUptrend = direction < 0
+isDowntrend = direction > 0
+isBullsStrengthDecreasing = volume < volume[1] and volume[1] < volume[2] and close > close[1] and close[1] > close[2] and open > open[1] and open[1] > open[2]
+isBearsStrengthDecreasing = volume < volume[1] and volume[1] < volume[2] and close < close[1] and close[1] < close[2] and open < open[1] and open[1] < open[2]
+isStrongVolume = (volume > volume[1]) or isBullsStrengthDecreasing or isBearsStrengthDecreasing
+isSmallCandle = (high - low) < close * candleDivider
+isUptrendTrapping = isUptrend and close < open and isStrongVolume and isSmallCandle
+isDowntrendTrapping = isDowntrend and close > open and isStrongVolume and isSmallCandle
+
+//plotshape(isUptrendTrapping, style=shape.triangleup, location=location.belowbar, color=color.green)
+//plotshape(isDowntrendTrapping, style=shape.triangledown, location=location.abovebar, color=color.orange)
+
+buyCondition = isUptrendTrapping
+sellCondition = isDowntrendTrapping
+// Signals
+if(start_time)
+    if (buyCondition)
+        strategy.entry('Buy', strategy.long, alert_message = "buy")
+        if(sellCondition)
+            strategy.close('Buy', alert_message = "sell")
+        strategy.exit('Close Buy', 'Buy', limit=stop_loss_and_tp ? strategy.position_avg_price * (1 + buy_tp) : na, stop=stop_loss_and_tp ? strategy.position_avg_price * (1 - buy_stop_loss) : na, trail_price=trail_stop ? strategy.position_avg_price * trail_stop_long : na, trail_offset=trail_stop ? -strategy.position_avg_price * trail_stop_long_offset : na, alert_message = "close")
+    if (sellCondition)
+        strategy.entry('Sell', strategy.short, alert_message = "sell")
+        if(buyCondition)
+            strategy.close('Sell', alert_message = "buy")
+        strategy.exit('Close Sell', 'Sell', limit=stop_loss_and_tp ? strategy.position_avg_price * (1 - sell_tp) : na, stop=stop_loss_and_tp ? strategy.position_avg_price * (1 + sell_stop_loss) : na, trail_price=trail_stop ? strategy.position_avg_price * trail_stop_short : na, trail_offset=trail_stop ? strategy.position_avg_price * trail_stop_short_offset : na, alert_message = "close")
+
+
+net_profit = strategy.netprofit + strategy.openprofit
+
+plot(net_profit, title='Net Profit', linewidth=2, style=plot.style_area, color=net_profit >= 0 ? #26A69A : color.red, transp=50)
