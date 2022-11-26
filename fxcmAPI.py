@@ -1,11 +1,10 @@
 import fxcmpy
 import math
-import time
 
 
 def fxcmConnect():
     global con
-    con = fxcmpy.fxcmpy(config_file='./config.cfg',
+    con = fxcmpy.fxcmpy(config_file='config.cfg',
                         server='demo')
 
 

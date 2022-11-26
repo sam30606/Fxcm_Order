@@ -1,6 +1,6 @@
 import json
 import configparser
-from module import fxcmAPI
+import fxcmAPI
 
 
 def tradingview(data):

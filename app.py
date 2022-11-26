@@ -1,6 +1,7 @@
 from flask import Flask, request
 import json
-from module import fxcmAPI, TVOrder
+import fxcmAPI
+import TVOrder
 
 app = Flask(__name__)
 
