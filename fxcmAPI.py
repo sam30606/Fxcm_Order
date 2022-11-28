@@ -1,11 +1,29 @@
 import fxcmpy
 import math
+import time
 
 
 def fxcmConnect():
     global con
-    con = fxcmpy.fxcmpy(config_file='config.cfg',
-                        server='demo')
+    try:
+        con = fxcmpy.fxcmpy(config_file='config.cfg',
+                            server='real')
+    except:
+        print('Connect fail, again')
+        time.sleep(1)
+        fxcmConnect()
+
+
+def checkConnect():
+    if con.is_connected() != True:
+        con.close()
+        print("FXCM disconnected")
+        fxcmConnect()
+        print("And FXCM disconnected")
+        return {"status": "FXCM disconnected and disconnected"}
+    else:
+        print("FXCM Connected")
+        return {"status": "FXCM Connected"}
 
 
 def getRate(symbol):
@@ -49,20 +67,9 @@ def fxcm(data):
                                rate=order_price, limit=limit_price, stop=stop_price,
                                amount=amount, time_in_force='GTC',
                                order_type='AtMarket', is_in_pips=False)
-        msg = {'status': 'success'} if order else {'status': 'fail'}
+        msg = {'status': 'order_success'} if order else {
+            'status': 'order_fail'}
     else:
         msg = {'status': 'fail_amount'}
 
     return msg
-
-
-def checkConnect():
-    if con.is_connected() != True:
-        con.close()
-        print("FXCM disconnected")
-        fxcmConnect()
-        print("And FXCM disconnected")
-        return {"status": "FXCM disconnected and disconnected"}
-    else:
-        print("FXCM Connected")
-        return {"status": "FXCM Connected"}
