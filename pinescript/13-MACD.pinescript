@@ -5,7 +5,7 @@
 // # ========================================================================= #
 // #                   |   STRATEGY  |
 // # ========================================================================= #
-strategy("12-BB", shorttitle="12-BB", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000)
+strategy("13-MACD", shorttitle="13-MACD", overlay=true , default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=10000)
 
 // # ========================================================================= #
 // #                   |   STRATEGY  |
@@ -97,23 +97,100 @@ atr = ta.atr(atrPeriod)
 // # ========================================================================= #
 
 // # ========================================================================= #
-// #                   |   BB  |
+// #                   |   MACD  |
 // # ========================================================================= #
-source = close
-length = input.int(20, minval=1)
-mult = input.float(2.0, minval=0.001, maxval=50)
-basis = ta.sma(source, length)
-dev = mult * ta.stdev(source, length)
-upper = basis + dev
-lower = basis - dev
-buyEntry = ta.crossover(source, lower)
-sellEntry = ta.crossunder(source, upper)
+var bool wave1 = na
+var bool wave2 = na
+var wave1Price = 0.0
+var wave2Price = 0.0
+var wave1Hist = 0.0
+var wave2Hist = 0.0
 
 
-buyBB = ta.crossover(source, lower)
-sellBB = ta.crossunder(source, upper)
+fast_length = input(title="Fast Length", defval=12)
+slow_length = input(title="Slow Length", defval=26)
+histLimit = input(title="histLimit", defval=20)
+src = input(title="Source", defval=close)
+signal_length = input.int(title="Signal Smoothing",  minval = 1, maxval = 50, defval = 9)
+sma_source = input.string(title="Oscillator MA Type",  defval="EMA", options=["SMA", "EMA"])
+sma_signal = input.string(title="Signal Line MA Type", defval="EMA", options=["SMA", "EMA"])
+// Plot colors
+col_macd = input(#2962FF, "MACD Line  ", group="Color Settings", inline="MACD")
+col_signal = input(#FF6D00, "Signal Line  ", group="Color Settings", inline="Signal")
+col_grow_above = input(#26A69A, "Above   Grow", group="Histogram", inline="Above")
+col_fall_above = input(#B2DFDB, "Fall", group="Histogram", inline="Above")
+col_grow_below = input(#FFCDD2, "Below Grow", group="Histogram", inline="Below")
+col_fall_below = input(#FF5252, "Fall", group="Histogram", inline="Below")
+// Calculating
+fast_ma = sma_source == "SMA" ? ta.sma(src, fast_length) : ta.ema(src, fast_length)
+slow_ma = sma_source == "SMA" ? ta.sma(src, slow_length) : ta.ema(src, slow_length)
+macd = fast_ma - slow_ma
+signal = sma_signal == "SMA" ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+hist = macd - signal
+
+//hline(0, "Zero Line", color=color.new(#787B86, 50))
+//plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)))
+//plot(macd, title="MACD", color=col_macd)
+//plot(signal, title="Signal", color=col_signal)
+absHint = math.abs(hist)
+
+if hist>=0
+    if not (hist[1]>=0)
+        wave1 := false
+        wave1Price := 0
+        wave1Hist := 0
+        wave2 := false
+        wave2Price := 0
+        wave2Hist := 0
+
+
+     
+    if  absHint >= syminfo.mintick*histLimit 
+        wave2 := wave2 ? wave2 : wave1 ? absHint < absHint[1] and absHint[1] > absHint[2] : false
+        wave2Price := wave2Price ? wave2Price : wave2 ? high[1] : 0.0
+        wave2Hist := wave2Hist ? wave2Hist : wave2 ? absHint[1] : 0.0
+        wave1 := wave1 ? wave1 : absHint < absHint[1] and absHint[1] > absHint[2]
+        wave1Price := wave1Price ? wave1Price :wave1 ? high[1] : 0.0
+        wave1Hist := wave1Hist ? wave1Hist : wave1 ? absHint[1] : 0.0
+else
+    if (hist[1]>=0)
+        wave1 := false
+        wave1Price := 0
+        wave1Hist := 0
+        wave2 := false
+        wave2Price := 0
+        wave2Hist := 0
+
+
+    if  absHint >= syminfo.mintick*histLimit 
+        wave2 := wave2 ? wave2 : wave1 ? absHint < absHint[1] and absHint[1] > absHint[2] : false
+        wave2Price := wave2Price ? wave2Price : wave2 ? high[1] : 0.0
+        wave2Hist := wave2Hist ? wave2Hist : wave2 ? absHint[1] : 0.0
+        wave1 := wave1 ? wave1 : absHint < absHint[1] and absHint[1] > absHint[2]
+        wave1Price := wave1Price ? wave1Price :wave1 ? high[1] : 0.0
+        wave1Hist := wave1Hist ? wave1Hist : wave1 ? absHint[1] : 0.0
+
+
+buyMACD = wave2Price ? hist<0 and (wave2Price >= wave1Price) and (wave1Hist >= wave2Hist) : false
+sellMACD = wave2Price ? hist>=0 and (wave2Price <= wave1Price) and (wave1Hist >= wave2Hist) : false
+
 // # ========================================================================= #
-// #                   |   BB  |
+// #                   |   MACD  |
+// # ========================================================================= #
+
+// # ========================================================================= #
+// #                   |   ATR   |
+// # ========================================================================= #
+length = input.int(title="Length", defval=14, minval=1)
+smoothing = input.string(title="Smoothing", defval="RMA", options=["RMA", "SMA", "EMA", "WMA"])
+ma_function(source, length) =>
+	switch smoothing
+		"RMA" => ta.rma(source, length)
+		"SMA" => ta.sma(source, length)
+		"EMA" => ta.ema(source, length)
+		=> ta.wma(source, length)
+// # ========================================================================= #
+// #                   |   ATR   |
 // # ========================================================================= #
 
 var entryPrice = 0.0
@@ -180,8 +257,8 @@ sellfilters = passADX and sellVFI and tradeDay
 
 // you can set your own logic here
 
-buyCondition = buyfilters and strategy.position_size == 0 and buyBB
-sellCondition = sellfilters and strategy.position_size == 0 and sellBB
+buyCondition = buyfilters and strategy.position_size == 0 and buyMACD
+sellCondition = sellfilters and strategy.position_size == 0 and sellMACD
 
 if (strategy.position_size != 0)
     entryPrice := strategy.opentrades.entry_price(strategy.opentrades - 1)
@@ -204,7 +281,7 @@ if(window())
             "R/R" => close + (close - priceStop) * ratioRR 
 
         strategy.entry('Buy', strategy.long, alert_message = "buy")
-        strategy.exit("Buy", limit=priceLimit, stop=priceStop, comment_profit="Buy_profit", comment_loss="Buy_loss", alert_message = "close")
+        strategy.exit("Buy", limit=priceLimit, stop=priceStop, comment_profit="Buy_profit", comment_loss="Buy_loss")
     if (sellCondition)
         priceStop := switch sellSLMeth
             "%" => close * (1 + sellSLPer / 100)
@@ -218,7 +295,7 @@ if(window())
             "R/R" => close - (priceStop - close) * ratioRR
 
         strategy.entry('Sell', strategy.short, alert_message = "sell")
-        strategy.exit("Sell",limit=priceLimit, stop=priceStop, comment_profit="Sell_profit", comment_loss="Sell_loss", alert_message = "close")
+        strategy.exit("Sell",limit=priceLimit, stop=priceStop, comment_profit="Sell_profit", comment_loss="Sell_loss")
         
 
 // # ========================================================================= #
@@ -241,5 +318,18 @@ plotchar(sellVFI, "sellVFI", "", location = location.top)
 plotchar(buyfilters, "buyfilters", "", location = location.top)
 plotchar(sellfilters, "sellfilters", "", location = location.top)
 plotchar(tradeDay, "tradeDay", "", location = location.top)
-plotchar(dayofweek(time = time, timezone = 'America/New_York' ) , "dayofweek(time = dayofweek, timezone = 'America/New_York' ) ", "", location = location.top)
+
+plotchar(wave1, "wave1", "", location = location.top)
+plotchar(wave1Price, "wave1Price", "", location = location.top)
+plotchar(wave1Hist, "wave1Hist", "", location = location.top)
+plotchar(wave2, "wave2", "", location = location.top)
+plotchar(wave2Price, "wave2Price", "", location = location.top)
+plotchar(wave2Hist, "wave2Hist", "", location = location.top)
+plotchar(not(hist[1]>=0), "not(hist[1]>=0)", "", location = location.top)
+plotchar((hist[1]>=0), "(hist[1]>=0)", "", location = location.top)
+plotchar((hist>=0), "(hist>=0)", "", location = location.top)
+
+
+
+
 plotchar(syminfo.mintick, "mintick", "", location = location.top)

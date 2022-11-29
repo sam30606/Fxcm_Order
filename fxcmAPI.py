@@ -36,7 +36,7 @@ def getRate(symbol):
 def calcAmount(total_order, symbol):
     accounts = con.get_accounts()
     usableMargin = accounts.at[0, 'usableMargin'] - \
-        accounts.at[0, 'balance'] * 0.2
+        accounts.at[0, 'balance'] * 0.5
     try:
         openedPositions = con.get_open_positions().shape[0]
     except:
@@ -52,24 +52,31 @@ def calcAmount(total_order, symbol):
 def fxcm(data):
     checkConnect()
 
-    if len(data['side']) == 0:
-        return {'status': 'side==0'}
-
     total_order = data['total_order']
     symbol = data['ticker'][:3]+"/"+data['ticker'][3:]
     side = True if data['side'] == 'buy' else False
     order_price = data['order_price']
     limit_price = data['limit_price']
     stop_price = data['stop_price']
-    amount = calcAmount(total_order, symbol)
-    if amount > 10:
-        order = con.open_trade(symbol=symbol, is_buy=side,
-                               rate=order_price, limit=limit_price, stop=stop_price,
-                               amount=amount, time_in_force='GTC',
-                               order_type='AtMarket', is_in_pips=False)
-        msg = {'status': 'order_success'} if order else {
-            'status': 'order_fail'}
-    else:
-        msg = {'status': 'fail_amount'}
 
-    return msg
+    if data['side'] == 'close':
+        try:
+            order = con.close_all_for_symbol(
+                symbol=symbol, order_type='AtMarket', time_in_force='GTC')
+        except:
+            order = 'nothing to close'
+        return {'status': order}
+
+    else:
+        amount = calcAmount(total_order, symbol)
+        if amount >= 5:
+            order = con.open_trade(symbol=symbol, is_buy=side,
+                                   rate=order_price, limit=limit_price, stop=stop_price,
+                                   amount=amount, time_in_force='GTC',
+                                   order_type='AtMarket', is_in_pips=False)
+            msg = {'status': 'order_success'} if order else {
+                'status': 'order_fail'}
+        else:
+            msg = {'status': 'fail_amount'}
+
+        return msg
