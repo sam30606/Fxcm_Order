@@ -13,7 +13,6 @@ def main():
 
     data = json.loads(request.data)
     msg = TVOrder.tradingview(data)
-
     return msg
 
 
