@@ -61,10 +61,11 @@ def fxcm(data):
     stop_price = data['stop_price']
 
     if data['side'] == 'close':
-        order = con.close_all_for_symbol(
-            symbol=symbol, order_type='AtMarket', time_in_force='GTC')
-        msg = {'status': 'close_success'} if type(order) != type(None) else {
-            'status': 'nothing to close'}
+        # order = con.close_all_for_symbol(
+        #     symbol=symbol, order_type='AtMarket', time_in_force='GTC')
+        # msg = {'status': 'close_success'} if type(order) != type(None) else {
+        #     'status': 'nothing to close'}
+        msg = {'status': 'disabled force close'}
         return msg
 
     elif (data['side'] == 'buy' or data['side'] == 'sell'):
